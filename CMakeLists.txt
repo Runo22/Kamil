@@ -24,6 +24,10 @@ endif()
 
 add_library(kamil_ryml STATIC src/core/ryml_impl.cpp)
 target_include_directories(kamil_ryml SYSTEM PUBLIC third_party/rapidyaml)
+if(MINGW)
+    # fast_float (inside the rapidyaml header) calls _umul128 on _WIN64 without declaring it.
+    target_compile_options(kamil_ryml PUBLIC -include intrin.h)
+endif()
 
 # ---------------------------------------------------------------------------------------------
 # Core: platform independent, unit tested
@@ -46,6 +50,7 @@ target_compile_options(kamil_core PRIVATE ${KAMIL_WARNINGS})
 # Kamil.exe (Windows)
 
 if(WIN32)
+    enable_language(RC)
     add_executable(Kamil WIN32
         src/app/main.cpp
         src/app/app.cpp
@@ -62,7 +67,7 @@ if(WIN32)
     )
     target_link_libraries(Kamil PRIVATE kamil_core
         d2d1 dwrite d3d11 dxgi dcomp dwmapi windowscodecs
-        shell32 shlwapi ole32 oleaut32 uuid propsys comctl32 user32 gdi32 advapi32)
+        shell32 shcore shlwapi ole32 oleaut32 uuid propsys comctl32 user32 gdi32 advapi32)
     target_compile_definitions(Kamil PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN
         _WIN32_WINNT=0x0A00 WINVER=0x0A00 KAMIL_VERSION="${PROJECT_VERSION}")
     target_compile_options(Kamil PRIVATE ${KAMIL_WARNINGS})

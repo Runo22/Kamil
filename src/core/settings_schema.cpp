@@ -55,9 +55,9 @@ Schema build() {
     s.add(choice(keys::kTheme, {"auto", "dark", "light"}, "auto", "Tema", "auto: Windows uygulama temasını izler"));
     s.add(def(keys::kAccent, Kind::Color, "auto", "Vurgu rengi",
               "auto: Windows vurgu rengi; ya da #RRGGBB (seçim ve eşleşen harfler)"));
-    s.add(ranged(keys::kWidth, 720, 480, 1400, "Pencere genişliği", "Piksel (100% ölçekte)"));
+    s.add(ranged(keys::kWidth, 720, 480, 1400, "Pencere genişliği", "%100 ölçekte piksel"));
     s.add(ranged(keys::kMaxRows, 8, 3, 16, "Görünen satır sayısı"));
-    s.add(ranged(keys::kFontSize, 14, 11, 22, "Yazı boyutu", "Sonuç başlıklarının punto değeri; diğer metinler orantılı"));
+    s.add(ranged(keys::kFontSize, 14, 11, 22, "Yazı boyutu", "Sonuç başlıklarının boyutu (%100 ölçekte piksel); diğer metinler orantılı"));
     s.add(ranged(keys::kPosition, 22, 0, 70, "Dikey konum", "Pencerenin üst kenarı, ekran yüksekliğinin yüzdesi olarak"));
     s.add(def(keys::kAnimations, Kind::Bool, true, "Animasyonlar", "Açılışta kısa solma efekti"));
 

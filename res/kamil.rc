@@ -1,0 +1,34 @@
+#include <windows.h>
+#include "resource.h"
+
+IDI_KAMIL ICON "kamil.ico"
+
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "kamil.manifest"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION 0,1,0,0
+PRODUCTVERSION 0,1,0,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "041F04B0"
+        BEGIN
+            VALUE "CompanyName", "Kamil"
+            VALUE "FileDescription", "Kamil - offline geliştirici başlatıcısı"
+            VALUE "FileVersion", "0.1.0"
+            VALUE "InternalName", "Kamil"
+            VALUE "OriginalFilename", "Kamil.exe"
+            VALUE "ProductName", "Kamil"
+            VALUE "ProductVersion", "0.1.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x041F, 1200
+    END
+END
