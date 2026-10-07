@@ -1,12 +1,12 @@
 # Kamil — Windows için Offline, Geliştirici Odaklı Başlatıcı
 
-> Durum: **Taslak v0.4** · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
+> Durum: **Taslak v0.5** · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
 
 Alfred'in iş akışını Windows'a, internetsiz bir iş bilgisayarına taşıyan; uygulama/dosya/klasör/LAN
 kaynaklarını anında bulan; script'leri, özel komutları, süreçleri ve CMake projelerinin
 build/debug planlarını tek kısayoldan (`Alt+Space`) yöneten, sürekli arka planda hazır duran bir yardımcı.
 
-### Netleşen kararlar (v0.2 – v0.4)
+### Netleşen kararlar (v0.2 – v0.5)
 
 | Konu | Karar |
 |---|---|
@@ -17,6 +17,7 @@ build/debug planlarını tek kısayoldan (`Alt+Space`) yöneten, sürekli arka p
 | Ayarlar | **Ayrı bir Ayarlar penceresi** (config dosyası yine elle düzenlenebilir) |
 | Projeler | CMake + **Ninja** (tek-config, preset başına bir konfigürasyon); `CMakePresets.json` + CMake File API |
 | VS'te açma | **Open Folder** |
+| VS sürümü | Proje başına tek sürüm (2022 *veya* 2026), ikisi aynı projede kullanılmaz |
 | Derleme | **Kamil derlemez**; configure/build/rebuild/clean COM (DTE) ile **varsayılan VS'e (2022 veya 2026)** gönderilir, VS derler |
 | COM port | Exe'ye **komut satırı argümanı** olarak (`--port {com}`) |
 | Test | CTest/test koşturma **kapsam dışı** |
@@ -475,8 +476,9 @@ Hangi exe'nin hangi argüman ve portla debug edileceğini tamamen plan belirler;
   Argümanında `{com}` geçmeyen profiller (ör. `sim`) bu kısıta takılmaz.
 - Çalışan exe derlemeyi kilitleyecekse build göndermeden önce "çalışan örneği kapat?" (Restart Manager).
 - Plan değiştirme `Ctrl+P`; seçim anında kaydedilir.
-- **VS2022 ↔ VS2026**: iki sürüm aynı build klasörünü farklı CMake sürümleriyle kullanırsa önbellek çakışır.
-  Plan VS sürümünü değiştirince Kamil uyarır; öneri: sürüm başına ayrı preset (`x64-debug-vs26`, farklı `binaryDir`).
+- **VS sürümü**: bir proje tek bir VS sürümüyle (2022 *veya* 2026) kullanılır; sürüm proje bazında seçilir
+  (varsayılan: ayarlardaki varsayılan VS). Sürüm değiştirilirse Kamil, CMake önbelleğinin yeniden
+  oluşturulacağını hatırlatır.
 
 ### 7.6 Konsol penceresi (çalıştırmalar)
 
@@ -618,7 +620,5 @@ Her fazda `kamil-bench` ile performans hedefleri (§1) ölçülür; gerileme CI'
 
 1. Aynı anda birden çok örnek çalıştırırken varsayılan davranış (§7.5: her örneğe ayrı port, yetmezse sırayla)
    uygun mu?
-2. VS2022 ve VS2026'yı **aynı projede** dönüşümlü kullanıyor musun? Kullanıyorsan sürüm başına ayrı
-   preset/build klasörü önerisi (§7.5) kabul edilebilir mi?
-3. `tools\vs-probe.ps1` çıktısı (iş bilgisayarında, proje VS'te açıkken): Open Folder'da hangi CMake
+2. `tools\vs-probe.ps1` çıktısı (iş bilgisayarında, proje VS'te açıkken): Open Folder'da hangi CMake
    komutlarının DTE'den çağrılabildiğini ve build olaylarının gelip gelmediğini kesinleştirir.
