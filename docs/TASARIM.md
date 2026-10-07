@@ -200,9 +200,12 @@ public:
 
 ### 4.1 Eşleştirme
 - **Bulanık eşleştirme** (fzf v2 benzeri): kelime başı, `CamelCase`, `_ - . \ /` sonrası, ardışık
-  karakter ve ön ek bonusları; **kısaltma**: `vsc` → **V**isual **S**tudio **C**ode.
+  karakter ve ön ek bonusları; **baş harfler**: `ws` → **W**indows **S**ecurity. VS Code için alışkanlık `code`:
+  varsayılan takma ad `code → Visual Studio Code`.
 - **Türkçe katlama**: `İ/i/I/ı` doğru; `ş→s ğ→g ü→u ö→o ç→c ı→i` → `calisma` = "Çalışma".
-- **Takma adlar**: `"not defteri" = "notepad"`.
+- **Takma adlar**: `code → Visual Studio Code` (varsayılan), `not defteri → Notepad`.
+- **Klasör önceliği** (`search.folder_priority`): belirtilen klasörlerin altındaki sonuçlara -100..100 puan;
+  en uzun eşleşen klasör geçerli (`D:\src\ana` 80, `D:\src` 20, `D:\eski` -60).
 - **Yazım hatası toleransı**: ≥4 karakterde az sonuç varsa 1 düzenleme mesafesiyle ikinci tur.
 - **Yol modu**: `\`, `C:\`, `\\sunucu\` ile başlayınca klasörde gezinme, `Tab` ile tamamlama.
 
@@ -212,6 +215,7 @@ skor = 100 × eşleşme(0..1)
      +  40 × bilgi(sorgu_öneki → öğe)       // "te" yazınca hep Tera Term seçildi
      +  30 × frecency(öğe)                    // log(1 + Σ ziyaret × 0.5^(yaş/14gün))
      +  10 × bağlam(saat, ön plandaki uygulama, aktif proje)
+     +       klasör_önceliği(öğenin yolu)          // search.folder_priority, -100..100
      +       tür_önceliği (ayarlanabilir)
 Takma ad tam eşleşmesi ve sabitlenenler en üstte.
 ```

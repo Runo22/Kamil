@@ -173,7 +173,7 @@ TEST(search_ranks_and_learns) {
     CHECK(hits[0].item->title == L"Windows Terminal");
 
     // Learning applies to that prefix; an unrelated query is unaffected.
-    hits = search(items, L"vsc", usage, opt);
+    hits = search(items, L"code", usage, opt);
     CHECK(hits[0].item->title == L"Visual Studio Code");
 
     hits = search(items, L"notlar", usage, opt);
@@ -223,4 +223,32 @@ TEST(usage_decay_and_persistence) {
     CHECK(loaded.frecency(L"app:A", t0) > 0.99);
     CHECK(loaded.affinity(widen("çal"), widen("app:Çalışma"), t0) > 0.99);
     std::filesystem::remove_all(dir);
+}
+
+TEST(search_folder_priority) {
+    std::vector<Item> items;
+    auto add = [&](const wchar_t* title, const wchar_t* path) {
+        Item it;
+        it.title = title;
+        it.key = std::wstring(L"repo:") + path;
+        it.path = path;
+        it.prepare();
+        items.push_back(std::move(it));
+    };
+    add(L"sensor-tools", L"C:\\Users\\me\\source\\repos\\sensor-tools");
+    add(L"sensor", L"D:\\src\\ana\\sensor");
+    add(L"sensor-old", L"D:\\src2\\sensor-old");
+    UsageStore usage;
+    SearchOptions opt;
+    auto hits = search(items, L"sensor", usage, opt);
+    CHECK(hits[0].item->title == L"sensor");  // exact match wins without boosts
+
+    opt.folder_boosts = {{normalize_folder(L"c:/users/ME/source/repos/"), 60}, {normalize_folder(L"D:\\src"), -80}};
+    hits = search(items, L"sensor", usage, opt);
+    CHECK(hits[0].item->title == L"sensor-tools");
+    CHECK(hits.back().item->title == L"sensor");          // pushed down
+    CHECK_EQ(folder_bonus(fold(L"D:\\src2\\sensor-old"), opt.folder_boosts), 0);  // D:\src is not a prefix of D:\src2
+
+    opt.folder_boosts.push_back({normalize_folder(L"D:\\src\\ana"), 40});  // longest prefix wins
+    CHECK_EQ(folder_bonus(fold(L"D:\\src\\ana\\sensor"), opt.folder_boosts), 40);
 }

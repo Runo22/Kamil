@@ -29,10 +29,12 @@ struct Item {
 
     // Derived search data, filled by prepare().
     std::wstring title_folded;
+    std::wstring path_folded;  // for folder priority
     uint64_t mask = 0;
 
     void prepare() {
         title_folded = fold(title);
+        path_folded = fold(path);
         mask = char_mask(title_folded);
     }
 };

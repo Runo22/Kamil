@@ -12,7 +12,8 @@ Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 | Tray simgesi, tek örnek, `Alt+Space` (değiştirilebilir) | ✓ |
 | Arama penceresi: Direct2D + DirectComposition, Win10'da yuvarlak köşe + gölge, açık/koyu tema, sistem vurgu rengi, DPI duyarlı | ✓ |
 | Uygulamalar: Başlat Menüsü + Store/UWP (`shell:AppsFolder`), disk önbelleği ile anında hazır, kendi ikonlarıyla | ✓ |
-| Bulanık arama: kısaltma (`vsc` → Visual Studio Code), kelime başı / CamelCase, Türkçe katlama (`calisma` → Çalışma) | ✓ |
+| Bulanık arama: `code` → Visual Studio Code (varsayılan takma ad), kelime başı / CamelCase / baş harfler (`ws` → Windows Security), Türkçe katlama (`calisma` → Çalışma) | ✓ |
+| Klasör önceliği: seçtiğin klasörlerin altındaki sonuçlar öne (veya eksi değerle arkaya) | ✓ |
 | Öğrenme: sık/son kullanılan + "bu yazışta bunu seçtin" (yerel, `usage.tsv`) | ✓ |
 | YAML ayarlar: şema tabanlı, doğrulama, satır numaralı hata bildirimi, kaydedince canlı yeniden yükleme, JSON Schema | ✓ |
 | Takma adlar, gizlenecek uygulama desenleri, Windows ile başlat | ✓ |
@@ -84,8 +85,15 @@ dev:
   repo_action: vs                         # depoda Enter: vs | code | explorer | terminal
   terminal: wt                            # wt | cmd | powershell | git-bash
   aliases:
+    - alias: code
+      target: Visual Studio Code
     - alias: not defteri
       target: Notepad
+  folder_priority:                        # bu klasörlerin altındaki sonuçlar öne çıkar
+    - path: 'D:\src\ana-proje'
+      priority: 80                        # -100..100; eksi değer aşağı iter
+    - path: 'D:\eski'
+      priority: -60
 ```
 
 ## Proje yapısı

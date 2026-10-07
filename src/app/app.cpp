@@ -271,6 +271,17 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
         if (a && t) search_options_.aliases.push_back({fold(trim(std::wstring_view(widen(a->as_string())))),
                                                        fold(trim(std::wstring_view(widen(t->as_string()))))});
     }
+    search_options_.folder_boosts.clear();
+    for (const auto& obj : s.get_objects(keys::kFolderPriority)) {
+        const Value* p = obj.find("path");
+        const Value* prio = obj.find("priority");
+        if (!p || !prio) continue;
+        const std::wstring raw = widen(p->as_string());
+        std::wstring expanded(32768, L'\0');
+        const DWORD n = ExpandEnvironmentStringsW(raw.c_str(), expanded.data(), static_cast<DWORD>(expanded.size()));
+        expanded.resize(n > 0 && n <= expanded.size() ? n - 1 : 0);
+        search_options_.folder_boosts.push_back({normalize_folder(expanded.empty() ? raw : expanded), static_cast<int>(prio->as_int())});
+    }
     usage_.set_half_life_days(static_cast<double>(s.get_int(keys::kLearningHalfLife)) / 86'400'000.0);
 
     exclude_patterns_.clear();

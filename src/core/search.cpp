@@ -27,6 +27,27 @@ bool better(const Hit& a, const Hit& b) {
 
 }  // namespace
 
+std::wstring normalize_folder(std::wstring_view path) {
+    std::wstring out = fold(trim(path));
+    for (auto& c : out)
+        if (c == L'/') c = L'\\';
+    while (out.size() > 1 && out.back() == L'\\') out.pop_back();
+    return out;
+}
+
+int folder_bonus(std::wstring_view path, const std::vector<FolderBoost>& boosts) {
+    size_t best_len = 0;
+    int bonus = 0;
+    for (const auto& b : boosts) {
+        const size_t n = b.folder.size();
+        if (n == 0 || n < best_len || path.size() < n || path.compare(0, n, b.folder) != 0) continue;
+        if (path.size() > n && path[n] != L'\\' && path[n] != L'/') continue;  // "D:\\src" must not match "D:\\src2"
+        best_len = n;
+        bonus = b.bonus;
+    }
+    return bonus;
+}
+
 std::vector<Hit> search(std::span<const Item> items, std::wstring_view query, const UsageStore& usage,
                         const SearchOptions& opt) {
     std::vector<Hit> hits;
@@ -59,6 +80,7 @@ std::vector<Hit> search(std::span<const Item> items, std::wstring_view query, co
             total += usage_bonus(usage.frecency(item.key, opt.now_unix), usage.affinity(folded_query, item.key, opt.now_unix));
         for (const auto& a : opt.aliases)
             if (a.alias_folded == folded_query && a.target_folded == item.title_folded) total += kAliasBoost;
+        if (!opt.folder_boosts.empty() && !item.path_folded.empty()) total += folder_bonus(item.path_folded, opt.folder_boosts);
         hits.push_back(Hit{&item, total, {}});
     }
 

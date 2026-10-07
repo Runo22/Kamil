@@ -70,10 +70,23 @@ Schema build() {
     s.add(def(keys::kExcludeApps, Kind::GlobList, Value::List{"*uninstall*", "*kaldır*"}, "Gizlenecek uygulamalar",
               "Bu desenlere uyan uygulama adları listelenmez ('*' ve '?' kullanılabilir, büyük/küçük harf ve Türkçe karakter duyarsız)"));
     {
-        auto d = def(keys::kAliases, Kind::ObjectList, Value::Objects{}, "Takma adlar",
+        Object code;
+        code.fields = {{"alias", Value("code")}, {"target", Value("Visual Studio Code")}};
+        auto d = def(keys::kAliases, Kind::ObjectList, Value::Objects{code}, "Takma adlar",
                      "Takma ad tam olarak yazılınca hedef uygulama en üste gelir");
         d.fields.push_back(field("alias", Kind::String, "", "not defteri", true));
         d.fields.push_back(field("target", Kind::String, "", "Notepad", true));
+        s.add(std::move(d));
+    }
+    {
+        auto d = def(keys::kFolderPriority, Kind::ObjectList, Value::Objects{}, "Klasör önceliği",
+                     "Bu klasörlerin altındaki sonuçlar (depolar, uygulamalar, dosyalar) yukarı taşınır; eksi değer aşağı iter. "
+                     "En uzun eşleşen klasör geçerlidir");
+        d.fields.push_back(field("path", Kind::Path, "", "'D:\\src\\ana-proje' (%ORTAM_DEĞİŞKENİ% kullanılabilir)", true));
+        SettingDef prio = field("priority", Kind::Int, 50, "-100..100 (varsayılan 50; tipik eşleşme puanı 50-300)");
+        prio.min = -100;
+        prio.max = 100;
+        d.fields.push_back(std::move(prio));
         s.add(std::move(d));
     }
     s.add(def(keys::kLearning, Kind::Bool, true, "Seçimlerden öğren",

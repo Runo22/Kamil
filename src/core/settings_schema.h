@@ -26,6 +26,7 @@ inline constexpr const char* kMaxResults = "search.max_results";
 inline constexpr const char* kShowFrequent = "search.show_frequent_when_empty";
 inline constexpr const char* kExcludeApps = "search.exclude_apps";
 inline constexpr const char* kAliases = "search.aliases";
+inline constexpr const char* kFolderPriority = "search.folder_priority";
 inline constexpr const char* kLearning = "search.learning";
 inline constexpr const char* kLearningHalfLife = "search.learning_half_life";
 
