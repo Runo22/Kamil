@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "core/fuzzy.h"
 #include "core/text.h"
 #include "platform/system_theme.h"
 
@@ -174,6 +175,19 @@ void LauncherWindow::create_text_formats() {
     make(std::round(base * 0.86f), DWRITE_FONT_WEIGHT_NORMAL, &fmt_subtitle_);
     make(std::round(base * 0.86f), DWRITE_FONT_WEIGHT_NORMAL, &fmt_hint_);
     make(std::round(base * 1.15f), DWRITE_FONT_WEIGHT_SEMI_BOLD, &fmt_letter_);
+    make(std::round(base * 0.86f), DWRITE_FONT_WEIGHT_NORMAL, &fmt_footer_);
+    fmt_glyph_.Reset();
+    dw->CreateTextFormat(L"Segoe MDL2 Assets", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                         DWRITE_FONT_STRETCH_NORMAL, std::round(base * 1.3f), L"", &fmt_glyph_);
+    if (fmt_glyph_) {
+        fmt_glyph_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        fmt_glyph_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    }
+    if (fmt_footer_) {
+        DWRITE_TRIMMING trim_footer{DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+        ComPtr<IDWriteInlineObject> ellipsis;
+        if (SUCCEEDED(dw->CreateEllipsisTrimmingSign(fmt_footer_.Get(), &ellipsis))) fmt_footer_->SetTrimming(&trim_footer, ellipsis.Get());
+    }
     if (fmt_hint_) fmt_hint_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
     if (fmt_letter_) {
         fmt_letter_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -212,10 +226,11 @@ void LauncherWindow::layout() {
     visible_rows_ = std::min(hits_.size(), max_rows);
     const bool empty_notice = hits_.empty() && !trim(std::wstring_view(edit_.text())).empty();
     const size_t rows_for_height = empty_notice ? 1 : visible_rows_;
-    panel_h_ = input_h_ + (rows_for_height ? 1.f + 2.f * pad_ + static_cast<float>(rows_for_height) * row_h_ : 0.f);
+    footer_h_ = style_.footer ? std::round(s(28.f)) : 0.f;
+    panel_h_ = input_h_ + (rows_for_height ? 1.f + 2.f * pad_ + static_cast<float>(rows_for_height) * row_h_ : 0.f) + footer_h_;
 
     // Swap chain sized for the largest window, so result changes never reallocate buffers.
-    const float max_h = input_h_ + 1.f + 2.f * pad_ + static_cast<float>(max_rows) * row_h_;
+    const float max_h = input_h_ + 1.f + 2.f * pad_ + static_cast<float>(max_rows) * row_h_ + footer_h_;
     renderer_.ensure_size(static_cast<UINT>(std::ceil(px(panel_w_ + 2 * margin_))),
                           static_cast<UINT>(std::ceil(px(max_h + 2 * margin_))));
 }
@@ -237,6 +252,12 @@ void LauncherWindow::show() {
     if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dx, &dy))) dx = 96;
     update_dpi(static_cast<float>(dx));
 
+    if (mode_ == Mode::Actions) {  // never reopen inside the action panel
+        mode_ = Mode::Results;
+        action_items_.clear();
+        hits_.clear();
+        edit_.set_text(saved_query_);
+    }
     if (style_.remember_query) {
         edit_.select_all();
     } else if (!edit_.text().empty()) {
@@ -288,6 +309,7 @@ void LauncherWindow::restart_caret() {
 // Results
 
 void LauncherWindow::set_results(std::vector<Hit> hits) {
+    if (mode_ == Mode::Actions) return;  // refreshed when the action panel closes
     hits_ = std::move(hits);
     selected_ = 0;
     scroll_ = 0;
@@ -326,6 +348,11 @@ LaunchMode LauncherWindow::mode_from_keyboard() const {
 void LauncherWindow::activate(size_t index, LaunchMode mode) {
     if (index >= hits_.size()) return;
     const Item item = *hits_[index].item;  // the callback may rebuild the item list
+    if (mode_ == Mode::Actions) {
+        const Item parent = action_parent_;
+        if (cb_.run_action) cb_.run_action(parent, item);
+        return;
+    }
     if (cb_.activate) cb_.activate(item, mode);
 }
 
@@ -334,8 +361,76 @@ void LauncherWindow::activate(size_t index, LaunchMode mode) {
 
 void LauncherWindow::text_changed() {
     restart_caret();
-    if (cb_.query_changed) cb_.query_changed(edit_.text());  // calls set_results()
+    if (mode_ == Mode::Actions) {
+        filter_actions();
+    } else if (cb_.query_changed) {
+        cb_.query_changed(edit_.text());  // calls set_results()
+    }
     render();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Action panel and completion
+
+void LauncherWindow::open_actions() {
+    if (mode_ == Mode::Actions || selected_ >= hits_.size() || !cb_.actions_for) return;
+    Item parent = *hits_[selected_].item;
+    std::vector<Item> actions = cb_.actions_for(parent);
+    if (actions.empty()) return;
+    for (auto& a : actions) a.prepare();
+    saved_query_ = edit_.text();
+    saved_selected_ = selected_;
+    action_parent_ = std::move(parent);
+    action_items_ = std::move(actions);
+    mode_ = Mode::Actions;
+    edit_.clear();
+    input_scroll_ = 0;
+    filter_actions();
+    restart_caret();
+    render();
+}
+
+void LauncherWindow::close_actions() {
+    if (mode_ != Mode::Actions) return;
+    mode_ = Mode::Results;
+    hits_.clear();
+    action_items_.clear();
+    edit_.set_text(saved_query_);
+    if (cb_.query_changed) cb_.query_changed(edit_.text());
+    if (saved_selected_ < hits_.size()) {
+        selected_ = saved_selected_;
+        ensure_visible();
+    }
+    restart_caret();
+    render();
+}
+
+void LauncherWindow::filter_actions() {
+    std::vector<Hit> hits;
+    const FuzzyMatcher matcher(edit_.text());
+    for (const auto& a : action_items_) {
+        if (matcher.empty()) {
+            hits.push_back(Hit{&a, 0, {}});
+            continue;
+        }
+        std::vector<uint16_t> pos;
+        if (auto sc = matcher.match(a.title, a.title_folded, &pos)) hits.push_back(Hit{&a, *sc, std::move(pos)});
+    }
+    std::stable_sort(hits.begin(), hits.end(), [](const Hit& a, const Hit& b) { return a.score > b.score; });
+    hits_ = std::move(hits);
+    selected_ = 0;
+    scroll_ = 0;
+    layout();
+    if (visible()) place_window();
+}
+
+void LauncherWindow::complete() {
+    if (selected_ >= hits_.size()) return;
+    const Item& item = *hits_[selected_].item;
+    std::wstring text = item.completion.empty() ? item.title : item.completion;
+    if (text == edit_.text()) return;
+    edit_.set_text(std::move(text));
+    text_changed();
 }
 
 void LauncherWindow::on_char(wchar_t ch) {
@@ -364,8 +459,13 @@ bool LauncherWindow::on_key(WPARAM vk, bool alt) {
     }
 
     switch (vk) {
+        case VK_TAB:
+            if (mode_ == Mode::Results) complete();
+            return true;
         case VK_ESCAPE:
-            if (edit_.has_selection() && style_.remember_query) {
+            if (mode_ == Mode::Actions) {
+                close_actions();
+            } else if (edit_.has_selection() && style_.remember_query) {
                 edit_.end(false);
                 render();
             } else {
@@ -388,11 +488,20 @@ bool LauncherWindow::on_key(WPARAM vk, bool alt) {
             move_selection(static_cast<int>(std::max<size_t>(1, visible_rows_)));
             return true;
         case VK_LEFT:
+            if (mode_ == Mode::Actions && edit_.text().empty()) {
+                close_actions();
+                return true;
+            }
             edit_.move_left(ctrl, shift);
             restart_caret();
             render();
             return true;
         case VK_RIGHT:
+            if (mode_ == Mode::Results && !shift && !edit_.has_selection() && edit_.caret() == edit_.text().size() &&
+                !hits_.empty()) {
+                open_actions();  // → at the end of the text opens the actions, like Alfred
+                return true;
+            }
             edit_.move_right(ctrl, shift);
             restart_caret();
             render();
@@ -449,7 +558,8 @@ bool LauncherWindow::on_key(WPARAM vk, bool alt) {
                 move_selection(1);
                 return true;
             case 'K':
-                move_selection(-1);
+                if (mode_ == Mode::Results) open_actions();
+                else close_actions();
                 return true;
             default:
                 break;
@@ -628,7 +738,8 @@ void LauncherWindow::render() {
     if (fmt_input_ && dw) {
         const std::wstring& text = edit_.text();
         const bool placeholder = text.empty();
-        const std::wstring shown = placeholder ? std::wstring(L"Uygulama veya komut ara…") : text;
+        const std::wstring hint = mode_ == Mode::Actions ? L"Eylem ara — " + action_parent_.title : L"Uygulama, depo veya komut ara…";
+        const std::wstring shown = placeholder ? hint : text;
         ComPtr<IDWriteTextLayout> tl;
         dw->CreateTextLayout(shown.c_str(), static_cast<UINT32>(shown.size()), fmt_input_.Get(), 10000.f, input_h_, &tl);
         if (tl) {
@@ -690,6 +801,7 @@ void LauncherWindow::render() {
         }
     }
     for (size_t i = 0; i < visible_rows_; ++i) draw_row(dc, scroll_ + i, list_top + static_cast<float>(i) * row_h_);
+    if (footer_h_ > 0) draw_footer(dc);
 
     if (!renderer_.end_draw() || renderer_.generation() != gen) {
         // Device lost: everything device-dependent is gone; draw again with fresh resources.
@@ -719,8 +831,15 @@ void LauncherWindow::draw_row(ID2D1DeviceContext* dc, size_t index, float y) {
     // icon
     const float icon = s(32.f);
     const float ix = x0 + 16.f, iy = y + (row_h_ - icon) / 2.f;
-    if (ID2D1Bitmap1* bmp = icon_for(item)) {
+    ID2D1Bitmap1* bmp = item.glyph && item.icon_source.empty() ? nullptr : icon_for(item);
+    if (bmp) {
         dc->DrawBitmap(bmp, D2D1::RectF(ix, iy, ix + icon, iy + icon), 1.f, D2D1_INTERPOLATION_MODE_LINEAR);
+    } else if (item.glyph && fmt_glyph_) {  // no program icon (or it could not be extracted)
+        brush->SetColor(with_alpha(pal_.text_secondary, 0.14f));
+        dc->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(ix, iy, ix + icon, iy + icon), 7.f, 7.f), brush.Get());
+        const wchar_t g[2] = {item.glyph, 0};
+        brush->SetColor(pal_.text);
+        dc->DrawText(g, 1, fmt_glyph_.Get(), D2D1::RectF(ix, iy, ix + icon, iy + icon), brush.Get());
     } else {
         brush->SetColor(with_alpha(pal_.text_secondary, 0.18f));
         dc->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(ix, iy, ix + icon, iy + icon), 7.f, 7.f), brush.Get());
@@ -774,6 +893,54 @@ void LauncherWindow::draw_row(ID2D1DeviceContext* dc, size_t index, float y) {
         brush->SetColor(pal_.text_secondary);
         dc->DrawTextLayout(D2D1::Point2F(tx, ty + tm.height + gap), sub.Get(), brush.Get());
     }
+}
+
+}  // namespace kamil
+
+namespace kamil {
+
+void LauncherWindow::refresh_footer() {
+    if (visible()) render();
+}
+
+void LauncherWindow::draw_footer(ID2D1DeviceContext* dc) {
+    if (cb_.footer) {
+        const Item* sel = selected_ < hits_.size() ? hits_[selected_].item : nullptr;
+        footer_ = cb_.footer(sel, mode_ == Mode::Actions ? &action_parent_ : nullptr);
+    }
+    IDWriteFactory* dw = renderer_.dwrite();
+    if (!dw || !fmt_footer_) return;
+    ComPtr<ID2D1SolidColorBrush> brush;
+    dc->CreateSolidColorBrush(pal_.divider, &brush);
+    if (!brush) return;
+    const float x0 = margin_, top = margin_ + panel_h_ - footer_h_;
+    dc->FillRectangle(D2D1::RectF(x0 + 1.f, top, x0 + panel_w_ - 1.f, top + 1.f), brush.Get());
+    // Slightly tinted strip so the footer reads as chrome, not as another result row.
+    brush->SetColor(with_alpha(pal_.text_secondary, dark_ ? 0.05f : 0.04f));
+    const float r = 10.f;
+    dc->PushAxisAlignedClip(D2D1::RectF(x0, top + 1.f, x0 + panel_w_, top + footer_h_), D2D1_ANTIALIAS_MODE_ALIASED);
+    dc->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x0 + 1.f, top - r, x0 + panel_w_ - 1.f, top + footer_h_ - 1.f), r, r),
+                             brush.Get());
+    dc->PopAxisAlignedClip();
+
+    const float pad = 16.f;
+    const float right_w = std::min(panel_w_ * 0.45f, 320.f);
+    ComPtr<IDWriteTextLayout> right, left;
+    if (!footer_.right.empty())
+        dw->CreateTextLayout(footer_.right.c_str(), static_cast<UINT32>(footer_.right.size()), fmt_footer_.Get(), right_w, footer_h_, &right);
+    if (right) right->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+    const float left_w = panel_w_ - 2 * pad - (right ? right_w + 12.f : 0.f);
+    if (!footer_.left.empty())
+        dw->CreateTextLayout(footer_.left.c_str(), static_cast<UINT32>(footer_.left.size()), fmt_footer_.Get(), std::max(10.f, left_w),
+                             footer_h_, &left);
+    brush->SetColor(pal_.text_secondary);
+    auto draw = [&](IDWriteTextLayout* tl, float x) {
+        DWRITE_TEXT_METRICS m{};
+        tl->GetMetrics(&m);
+        dc->DrawTextLayout(D2D1::Point2F(x, top + (footer_h_ - m.height) / 2.f), tl, brush.Get());
+    };
+    if (left) draw(left.Get(), x0 + pad);
+    if (right) draw(right.Get(), x0 + panel_w_ - pad - right_w);
 }
 
 }  // namespace kamil

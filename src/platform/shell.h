@@ -45,6 +45,9 @@ struct Notification {
 // Executes an item. Must run on an STA thread (the Executor). Returns an error text, empty on success.
 std::wstring launch_item(const Item& item, LaunchMode mode);
 
+// Starts a program with arguments (quote them with quote_arg) in `dir`. Returns an error text.
+std::wstring run_program(const std::wstring& exe, const std::wstring& args, const std::wstring& dir = {});
+
 // Opens a text file in the user's editor: the .yaml association, otherwise Notepad.
 std::wstring open_in_editor(const std::filesystem::path& file);
 std::wstring open_folder(const std::filesystem::path& folder);

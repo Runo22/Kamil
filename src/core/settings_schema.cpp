@@ -60,6 +60,8 @@ Schema build() {
     s.add(ranged(keys::kFontSize, 14, 11, 22, "Yazı boyutu", "Sonuç başlıklarının boyutu (%100 ölçekte piksel); diğer metinler orantılı"));
     s.add(ranged(keys::kPosition, 22, 0, 70, "Dikey konum", "Pencerenin üst kenarı, ekran yüksekliğinin yüzdesi olarak"));
     s.add(def(keys::kAnimations, Kind::Bool, true, "Animasyonlar", "Açılışta kısa solma efekti"));
+    s.add(def(keys::kFooter, Kind::Bool, true, "Alt bilgi çubuğu",
+              "Pencerenin altında seçili öğenin bağlamı (git dalı, değişiklikler, yol) ve tuş ipuçları"));
 
     s.set_section_title("search", "Arama");
     s.add(ranged(keys::kMaxResults, 50, 10, 500, "En fazla sonuç", "Bir aramada sıralanıp listelenecek sonuç sayısı"));
@@ -86,7 +88,31 @@ Schema build() {
 
     s.set_section_title("dev", "Geliştirme");
     s.add(choice(keys::kDefaultVs, {"vs2026", "vs2022"}, "vs2026", "Varsayılan Visual Studio",
-                 "Build/debug komutlarının gönderileceği sürüm (proje bazında değiştirilebilir)"));
+                 "Build/debug komutlarının gönderileceği ve klasörlerin açılacağı sürüm (proje bazında değiştirilebilir)"));
+    {
+        auto d = def(keys::kProjectRoots, Kind::PathList, Value::List{"%USERPROFILE%\\source\\repos"}, "Proje kökleri",
+                     "Git depoları bu klasörlerin altında aranır; %ORTAM_DEĞİŞKENİ% kullanılabilir. Örnek: ['D:\\src', 'D:\\work']");
+        d.apply = Apply::Reindex;
+        s.add(std::move(d));
+    }
+    {
+        auto d = ranged(keys::kScanDepth, 4, 1, 8, "Tarama derinliği", "Proje köklerinin kaç klasör altına inilsin");
+        d.apply = Apply::Reindex;
+        s.add(std::move(d));
+    }
+    {
+        auto d = def(keys::kScanExclude, Kind::GlobList,
+                     Value::List{"node_modules", "out", "build", "bin", "obj", "__pycache__", "venv", "packages"},
+                     "Taranmayacak klasörler", "Depo ararken içine girilmeyecek klasör adları (desen kullanılabilir)");
+        d.apply = Apply::Reindex;
+        s.add(std::move(d));
+    }
+    s.add(choice(keys::kRepoAction, {"vs", "code", "explorer", "terminal"}, "vs", "Depoda Enter",
+                 "Bir git deposu seçilip Enter'a basılınca: Visual Studio (Open Folder), VS Code, Gezgin veya terminal"));
+    s.add(choice(keys::kTerminal, {"wt", "cmd", "powershell", "git-bash"}, "wt", "Terminal",
+                 "'Terminalde aç' eyleminin kullanacağı program (wt yoksa cmd)"));
+    s.add(def(keys::kGitStatus, Kind::Bool, true, "Git durumunu göster",
+              "Seçili deponun değişiklik sayısı ve ahead/behind bilgisi (git.exe çalıştırılır)"));
     return s;
 }
 

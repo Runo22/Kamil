@@ -96,6 +96,11 @@ std::wstring launch_item(const Item& item, LaunchMode mode) {
     return shell_execute(item.target, nullptr);
 }
 
+std::wstring run_program(const std::wstring& exe, const std::wstring& args, const std::wstring& dir) {
+    if (exe.empty()) return L"Program bulunamadı.";
+    return shell_execute(exe, nullptr, args, dir);
+}
+
 std::wstring open_in_editor(const std::filesystem::path& file) {
     const std::wstring err = shell_execute(file.wstring(), L"open");
     if (err.empty()) return {};

@@ -5,7 +5,7 @@ yazdıkça Türkçe karakterleri tanıyan bulanık arama yapar ve seçimlerinden
 
 Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 
-## Durum: Faz 0 (iskelet)
+## Durum: Faz 0 + git entegrasyonu
 
 | Özellik | Durum |
 |---|---|
@@ -16,7 +16,11 @@ Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 | Öğrenme: sık/son kullanılan + "bu yazışta bunu seçtin" (yerel, `usage.tsv`) | ✓ |
 | YAML ayarlar: şema tabanlı, doğrulama, satır numaralı hata bildirimi, kaydedince canlı yeniden yükleme, JSON Schema | ✓ |
 | Takma adlar, gizlenecek uygulama desenleri, Windows ile başlat | ✓ |
-| Ayarlar penceresi, özel komutlar, dosya indeksi, projeler/build/debug | Faz 1–3 |
+| Git: proje köklerindeki depolar, dal (anında) + değişiklik / ahead-behind (arka planda) | ✓ |
+| Eylem paneli (`Ctrl+K`): VS 2026/2022 (Open Folder), VS Code, Gezgin, terminal, Git Bash, Git GUI — kendi ikonlarıyla | ✓ |
+| `Tab` tamamlama, alt bilgi çubuğu (dal, değişiklikler, tuş ipuçları) | ✓ |
+| Preset/plan seçimi, VS'te build/debug, COM port | Faz 1 (sıradaki) |
+| Ayarlar penceresi, özel komutlar, dosya indeksi | Faz 2–3 |
 | Windows 11 Acrylic arka plan | sonraki adım (şu an iki sistemde de düz yüzey) |
 
 ## Derleme (Visual Studio 2026)
@@ -40,7 +44,9 @@ Tek bir `Kamil.exe` üretilir (statik CRT, ek DLL gerekmez). VS2022 ile de derle
 | Tuş | İşlev |
 |---|---|
 | `Alt+Space` | Aç / kapat |
-| `↑ ↓`, `Ctrl+J/K`, `PgUp/PgDn`, fare tekerleği | Sonuçlarda gezin |
+| `↑ ↓`, `Ctrl+J`, `PgUp/PgDn`, fare tekerleği | Sonuçlarda gezin |
+| `Tab` | Seçili öğenin adını arama kutusuna yaz (tamamla) |
+| `Ctrl+K` veya metnin sonunda `→` | Eylem paneli; `Esc`/`←` geri |
 | `Enter` | Aç |
 | `Ctrl+Enter` | Dosya konumunu Gezgin'de göster |
 | `Shift+Enter` | Yönetici olarak çalıştır |
@@ -72,6 +78,11 @@ appearance:
   max_rows: 8
 search:
   exclude_apps: ['*uninstall*', '*kaldır*']
+dev:
+  default_vs: vs2026
+  project_roots: ['D:\src', 'D:\work']   # git depoları burada aranır
+  repo_action: vs                         # depoda Enter: vs | code | explorer | terminal
+  terminal: wt                            # wt | cmd | powershell | git-bash
   aliases:
     - alias: not defteri
       target: Notepad
@@ -82,7 +93,7 @@ search:
 ```
 src/core/       platform bağımsız çekirdek (bulanık arama, ayar altyapısı, öğrenme) — birim testli
 src/platform/   Win32 yardımcıları (tray, ikonlar, dosya izleme, kabuk işlemleri)
-src/providers/  sonuç kaynakları (uygulamalar)
+src/providers/  sonuç kaynakları (uygulamalar, git depoları)
 src/ui/         arama penceresi ve Direct2D çizim katmanı
 src/app/        uygulama: mesaj döngüsü, ayarların uygulanması
 tests/          birim testleri (bağımlılıksız mini çerçeve)

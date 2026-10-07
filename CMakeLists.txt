@@ -34,6 +34,7 @@ endif()
 
 add_library(kamil_core STATIC
     src/core/fuzzy.cpp
+    src/core/git.cpp
     src/core/hotkey.cpp
     src/core/line_edit.cpp
     src/core/search.cpp
@@ -57,10 +58,13 @@ if(WIN32)
         src/app/paths.cpp
         src/platform/file_watcher.cpp
         src/platform/icon_loader.cpp
+        src/platform/process.cpp
         src/platform/shell.cpp
         src/platform/system_theme.cpp
+        src/platform/tools.cpp
         src/platform/tray.cpp
         src/providers/apps_provider.cpp
+        src/providers/repo_provider.cpp
         src/ui/launcher_window.cpp
         src/ui/renderer.cpp
         res/kamil.rc
@@ -84,7 +88,7 @@ endif()
 
 if(KAMIL_BUILD_TESTS)
     enable_testing()
-    add_executable(kamil_tests tests/test_main.cpp tests/test_core.cpp tests/test_settings.cpp)
+    add_executable(kamil_tests tests/test_main.cpp tests/test_core.cpp tests/test_git.cpp tests/test_settings.cpp)
     target_link_libraries(kamil_tests PRIVATE kamil_core)
     target_compile_options(kamil_tests PRIVATE ${KAMIL_WARNINGS})
     if(MINGW)

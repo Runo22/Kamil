@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "app/paths.h"
@@ -11,9 +12,11 @@
 #include "core/usage.h"
 #include "platform/file_watcher.h"
 #include "platform/icon_loader.h"
+#include "platform/tools.h"
 #include "platform/shell.h"
 #include "platform/tray.h"
 #include "providers/apps_provider.h"
+#include "providers/repo_provider.h"
 #include "ui/launcher_window.h"
 
 namespace kamil {
@@ -41,6 +44,12 @@ private:
     void run_query(const std::wstring& query);
 
     void on_activate(const Item& item, LaunchMode mode);
+    std::vector<Item> actions_for(const Item& item) const;
+    void run_action(const Item& parent, const std::wstring& action);
+    Footer footer_for(const Item* selected, const Item* action_parent);
+    std::wstring repo_context(const std::wstring& path);
+    void scan_repos();
+    std::wstring default_repo_action() const;
     void run_command(const std::wstring& id);
     void toggle_from_tray();
     void show_tray_menu(POINT at);
@@ -62,12 +71,18 @@ private:
     std::vector<std::wstring> exclude_patterns_;  // folded globs
 
     std::vector<Item> apps_;
+    std::vector<RepoInfo> repos_;
+    std::unordered_map<std::wstring, RepoState> repo_states_;
+    Tools tools_;
+    bool tools_ready_ = false;
     std::vector<Item> items_;  // commands + filtered apps; LauncherWindow keeps pointers into it
 
     LauncherWindow launcher_;
     Tray tray_;
     FileWatcher watcher_;
     AppsProvider apps_provider_;
+    RepoProvider repo_provider_;
+    std::unique_ptr<GitService> git_;
     std::unique_ptr<IconLoader> icon_loader_;
     std::unique_ptr<Executor> executor_;
 };

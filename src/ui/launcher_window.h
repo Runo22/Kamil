@@ -23,8 +23,14 @@ struct LauncherStyle {
     bool animations = true;
     bool remember_query = false;
     bool hide_on_focus_loss = true;
+    bool footer = true;
     std::string theme = "auto";   // auto | dark | light
     std::string accent = "auto";  // auto | #rrggbb
+};
+
+struct Footer {
+    std::wstring left;   // context: git branch, changes, path ...
+    std::wstring right;  // key hints
 };
 
 class LauncherWindow {
@@ -34,6 +40,11 @@ public:
         std::function<void(const Item& item, LaunchMode mode)> activate;
         std::function<void(const Item& item, uint32_t size_px)> need_icon;
         std::function<void(const Item& item)> copy_item;
+        // Action panel (Ctrl+K): the actions of an item, and running one of them.
+        std::function<std::vector<Item>(const Item& item)> actions_for;
+        std::function<void(const Item& item, const Item& action)> run_action;
+        // Footer text for the selected item (nullptr when nothing is selected).
+        std::function<Footer(const Item* selected, const Item* action_parent)> footer;
     };
 
     bool create(HINSTANCE instance, Callbacks callbacks);
@@ -53,6 +64,8 @@ public:
     // GetTickCount64() of the last hide, used to ignore the tray click that caused the hide.
     uint64_t hidden_at() const { return hidden_at_; }
     const std::wstring& query() const { return edit_.text(); }
+    bool in_action_panel() const { return mode_ == Mode::Actions; }
+    void refresh_footer();  // re-query the footer (e.g. git status arrived)
 
 private:
     struct Palette {
@@ -67,7 +80,14 @@ private:
         bool failed = false;
     };
 
+    enum class Mode { Results, Actions };
+
     static LRESULT CALLBACK wndproc(HWND, UINT, WPARAM, LPARAM);
+    void open_actions();
+    void close_actions();
+    void filter_actions();
+    void complete();
+    void draw_footer(ID2D1DeviceContext* dc);
     LRESULT handle(UINT msg, WPARAM wp, LPARAM lp);
 
     bool on_key(WPARAM vk, bool alt);
@@ -100,19 +120,26 @@ private:
     Palette pal_{};
     bool dark_ = true;
 
-    ComPtr<IDWriteTextFormat> fmt_input_, fmt_title_, fmt_subtitle_, fmt_hint_, fmt_letter_;
+    ComPtr<IDWriteTextFormat> fmt_input_, fmt_title_, fmt_subtitle_, fmt_hint_, fmt_letter_, fmt_glyph_, fmt_footer_;
     ComPtr<IDWriteInlineObject> ellipsis_title_, ellipsis_subtitle_;
 
     LineEdit edit_;
     float input_scroll_ = 0.f;
     bool caret_on_ = true;
 
+    Mode mode_ = Mode::Results;
+    Item action_parent_;               // item whose actions are shown
+    std::vector<Item> action_items_;   // owned here; hits_ point into it while in Mode::Actions
+    std::wstring saved_query_;         // search text restored when leaving the action panel
+    size_t saved_selected_ = 0;
+    Footer footer_;
+
     std::vector<Hit> hits_;
     size_t selected_ = 0;
     size_t scroll_ = 0;
 
     // Layout (DIPs), computed by layout().
-    float margin_ = 18.f, panel_w_ = 720.f, panel_h_ = 56.f, input_h_ = 56.f, row_h_ = 48.f, pad_ = 6.f;
+    float margin_ = 18.f, panel_w_ = 720.f, panel_h_ = 56.f, input_h_ = 56.f, row_h_ = 48.f, pad_ = 6.f, footer_h_ = 0.f;
     size_t visible_rows_ = 0;
     POINT origin_px_{};  // top-left of the window, physical pixels
 

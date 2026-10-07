@@ -1,12 +1,12 @@
 # Kamil — Windows için Offline, Geliştirici Odaklı Başlatıcı
 
-> Durum: **Taslak v0.6** · Uygulama: **Faz 0 kodlandı** (bkz. README) · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
+> Durum: **Taslak v0.7** · Uygulama: **Faz 0 + git entegrasyonu kodlandı** (bkz. README) · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
 
 Alfred'in iş akışını Windows'a, internetsiz bir iş bilgisayarına taşıyan; uygulama/dosya/klasör/LAN
 kaynaklarını anında bulan; script'leri, özel komutları, süreçleri ve CMake projelerinin
 build/debug planlarını tek kısayoldan (`Alt+Space`) yöneten, sürekli arka planda hazır duran bir yardımcı.
 
-### Netleşen kararlar (v0.2 – v0.6)
+### Netleşen kararlar (v0.2 – v0.7)
 
 | Konu | Karar |
 |---|---|
@@ -26,6 +26,11 @@ build/debug planlarını tek kısayoldan (`Alt+Space`) yöneten, sürekli arka p
 | Öncelik | **Build / Debug / Çalıştır / COM port** akışı ilk geliştirilecek bölüm |
 | Özel komutlar | Parametreli, kısayol atanabilir, zincirlenebilir kullanıcı komutları |
 | Kısayol | `Alt+Space` |
+| Git | Proje köklerindeki depolar sonuçlarda; dal anında (HEAD okunur), değişiklik/ahead-behind arka planda `git status` ile (§5.11) |
+| İkonlar | Her sonuç ve eylem **gerçek uygulama/dosya ikonuyla** gösterilir (VS 2026, VS Code, Git Bash, klasör…); ikon yoksa Segoe MDL2 glifi, o da yoksa baş harf |
+| Tamamlama | `Tab` seçili öğenin adını (veya bağlama göre preset/dal adını) arama kutusuna yazar |
+| Eylem paneli | `Ctrl+K` veya metnin sonunda `→`; her eylem kendi programının ikonuyla |
+| Alt bilgi çubuğu | Pencerenin altında küçük bağlam satırı: git dalı, değişiklikler, preset, çalışan iş + tuş ipuçları |
 | Görünüm | Sade, az öğeli, sistem temasına uyumlu |
 
 ---
@@ -326,6 +331,40 @@ actions:                    # bağlamsal eylem: eşleşen öğelerin Tab menüs�
   `{output}` `{output_dir}` `{project_dir}` `{build_dir}` `{env:VAR}`.
 - Özel komutlar plan adımı (`pre`/`post`) olarak da kullanılabilir.
 
+### 5.11 Git entegrasyonu
+
+**Keşif:** `dev.project_roots` altındaki klasörler arka planda taranır (`dev.scan_depth`, `dev.scan_exclude`);
+`.git` klasörü veya worktree/submodule `.git` dosyası (`gitdir: …`) olan her klasör bir **depo öğesi** olur.
+Bulunan bir deponun içine inilmez. Tarama uygulama taramasıyla birlikte 30 dakikada bir ve ayar değişince yenilenir.
+
+**Dal bilgisi git.exe olmadan:** `HEAD` dosyası doğrudan okunur (`ref: refs/heads/main` → `main`, kopuk HEAD →
+kısa commit). Liste açılır açılmaz her deponun dalı alt satırda görünür.
+
+**Durum (arka planda):** Seçili depo için `git --no-optional-locks status --porcelain=v1 -b` çalıştırılır (3 sn zaman
+aşımı, konsol penceresi açılmaz, VS/Git GUI ile `index.lock` yarışı olmaz). Sonuç 5 sn önbelleklenir; sadece pencere
+açıkken ve seçili depo için yenilenir. Alt bilgi çubuğunda:
+
+```
+⎇ feature/com-port   ● 3 değişiklik   ↑1 ↓2                       Enter Visual Studio · Ctrl+K eylemler · Tab
+```
+
+**Depo eylemleri** (`Ctrl+K`), her biri programın kendi ikonuyla; varsayılan `Enter` eylemi `dev.repo_action`:
+
+| Eylem | Program |
+|---|---|
+| Visual Studio 2026'da aç (Open Folder) | `devenv.exe "<klasör>"` (vswhere ile bulunur; 2022 de kuruluysa ikinci satır) |
+| VS Code'da aç | `Code.exe "<klasör>"` |
+| Gezgin'de aç | `explorer.exe` |
+| Terminalde aç | `dev.terminal`: Windows Terminal (`wt -d`), cmd, PowerShell, Git Bash |
+| Git Bash'te aç / Git GUI | Git for Windows kurulumundan |
+| Yolu kopyala / Dal adını kopyala | — |
+
+**Sonraki adımlar (Faz 1 içinde):**
+- `dal <depo>` / `br`: yerel dallar listesi, `Tab` ile tamamlama, `Enter` = `git switch` (değişiklik varsa uyarı).
+- Son commit'ler (`git log -n 20 --oneline`), stash sayısı, değişen dosyalar listesi → dosyayı VS/VS Code'da aç.
+- LAN'daki git sunucusu için `fetch`/`pull` eylemleri (çıktı Konsol'da).
+- Proje (CMake) öğesi ile depo öğesinin birleşmesi: aynı klasör tek satır, alt bilgide dal + aktif preset.
+
 ---
 
 ## 6. LAN / Ağ Yolları: Donmayı Önleme
@@ -482,6 +521,27 @@ Hangi exe'nin hangi argüman ve portla debug edileceğini tamamen plan belirler;
   (varsayılan: ayarlardaki varsayılan VS). Sürüm değiştirilirse Kamil, CMake önbelleğinin yeniden
   oluşturulacağını hatırlatır.
 
+**Preset seçimi ve tamamlama:** Plan/preset seçimi başlatıcının içinde, yazarak yapılır:
+
+```
+sa preset rel▏          Tab →   sa preset x64-release
+  ⚙ x64-release        Configure preset · out\build\x64-release · son build 12 dk önce
+  ⚙ x64-relwithdebinfo
+```
+
+- `Tab` seçili preset'in tam adını yazar; `Enter` planın preset'ini değiştirir ve kaydeder.
+- Aynı mekanizma plan, COM port (`sa com`) ve argüman profili (`sa args`) seçiminde de kullanılır.
+
+**Alt bilgi çubuğunda bağlam ve çalışan iş:**
+
+```
+⎇ main   ● 2 değişiklik   ⚙ x64-debug   COM7            Enter Debug (VS2026) · Ctrl+P plan · Ctrl+K
+⚒ Build x64-debug  0:41  ▓▓▓▓▓▓░░ 37/120   ⎇ main      Esc gizle (build sürer)
+```
+
+Bir build/debug/çalıştırma sürerken alt bilgi çubuğu işin durumunu (tür, preset, süre, Ninja ilerlemesi) dal ve
+port bilgisiyle birlikte gösterir; pencere kapatılsa bile iş sürer, tray ipucunda da görünür.
+
 ### 7.6 Konsol penceresi (çalıştırmalar)
 
 ImGui, istek üzerine açılır. Derleme çıktısı VS'te kalır; Konsol, Kamil'in **başlattığı exe'ler** içindir:
@@ -537,7 +597,8 @@ bilgi hiyerarşisi yazı ağırlığı ve gri tonlarla.
 | Satır | 48 px; 32 px ikon; başlık 14 px, alt satır 12 px ikincil renk |
 | Seçim | 6 px yuvarlak dolgu, vurgu rengi %16 opaklık |
 | Eşleşen harfler | Vurgu rengi, aynı ağırlık |
-| Alt bilgi | 28 px, sadece proje bağlamında veya ipuçları açıksa |
+| Alt bilgi | 28 px, hafif tonlu şerit: solda bağlam (dal, değişiklikler, preset, iş), sağda tuş ipuçları; `appearance.footer` ile kapatılabilir |
+| İkonlar | 32 px, gerçek program/dosya ikonu (shell); yoksa MDL2 glifi; yoksa baş harf rozeti |
 | Animasyon | 90 ms solma + 6 px kayma (kapatılabilir); yazmaya ilk karede başlanabilir |
 
 **Renkler:**
@@ -557,9 +618,10 @@ Ayarlar ve Konsol pencereleri aynı renk/ölçü tokenlarını kullanır; böyle
 | Tuş | İşlev |
 |---|---|
 | `Alt+Space` | Aç/kapat |
-| `↑ ↓`, `Ctrl+J/K` | Gezin |
+| `↑ ↓`, `Ctrl+J` | Gezin |
 | `Enter` / `Ctrl+Enter` / `Shift+Enter` | Varsayılan / ikincil / yönetici |
-| `Tab`, `→` | Eylem paneli |
+| `Tab` | Tamamla (seçili öğenin adı / preset / dal) |
+| `Ctrl+K`, metnin sonunda `→` | Eylem paneli (`Esc` / `←` geri) |
 | `Alt+1…9` | Doğrudan seç |
 | `Ctrl+P` | Plan değiştir (proje bağlamında) |
 | `Alt+B` / `Alt+D` / `Alt+R` | Aktif plan: Build (VS'te) / Debug / Çalıştır |
@@ -686,7 +748,7 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 | Faz | Kapsam | Çıktı |
 |---|---|---|
 | **0 – İskelet** | Tray, `Alt+Space`, D2D pencere (Win10 düz + yuvarlak köşe, Win11 Acrylic), uygulama sağlayıcı, bulanık eşleştirme, başlatma, **ayar altyapısının çekirdeği** (şema, YAML okuma/doğrulama, canlı yeniden yükleme) | Kullanılabilir mini başlatıcı |
-| **1 – Build / Debug (öncelik)** | `vs-probe` doğrulaması, vswhere + varsayılan VS, DTE köprüsü (örnek bulma, build/configure tetikleme, bitiş izleme, Output'tan hata listesi), CMakePresets + File API, proje keşfi, plan modeli + son plan hafızası, Konsol penceresi (çalıştırma sekmeleri), preset başına çalıştırma, Debug (VS'te derle + başlat + bağlan, IDE içi F5, DebugExe), COM port servisi + çoklu örnekte port atama | Günlük build/debug kullanımı |
+| **1 – Git + Build / Debug (öncelik)** | ✓ git depo keşfi, dal/durum, depo eylemleri, eylem paneli, `Tab` tamamlama, alt bilgi çubuğu · `vs-probe` doğrulaması, vswhere + varsayılan VS, DTE köprüsü (örnek bulma, build/configure tetikleme, bitiş izleme, Output'tan hata listesi), CMakePresets + File API, proje keşfi, plan modeli + son plan hafızası, Konsol penceresi (çalıştırma sekmeleri), preset başına çalıştırma, Debug (VS'te derle + başlat + bağlan, IDE içi F5, DebugExe), COM port servisi + çoklu örnekte port atama | Günlük build/debug kullanımı |
 | **2 – Ayarlar & Özel komutlar** | Ayarlar penceresi (şemadan üretilen form, arama, katman gösterimi, yorum koruyarak yazma, yedek), özel komutlar + parametre soruları + zincirler, script klasörleri, global öğe kısayolları, hariç tutma düzenleyici | Kodsuz yapılandırma |
 | **3 – Arama genişlemesi** | Dosya indeksi + mmap önbellek + watcher, ikon önbelleği, sık kullanılanlar/LAN/şablonlu bağlantılar, Everything (opsiyonel), tam eylem paneli | Alfred eşdeğeri arama |
 | **4 – Akıllanma & araçlar** | Öğrenme/tahmin, kill/lock/port/err/hesap, KamilIndexer (MFT/USN), Alfred eklentileri, tema dosyaları | Tam sürüm |

@@ -12,6 +12,8 @@ enum class ItemKind : uint8_t {
     File,
     Folder,
     Command,  // built-in Kamil command
+    Repo,     // git work tree
+    Action,   // entry of the action panel (Ctrl+K)
 };
 
 struct Item {
@@ -20,6 +22,9 @@ struct Item {
     std::wstring subtitle;
     std::wstring target;      // what gets launched: AppsFolder parsing name, path, URL or command id
     std::wstring path;        // file system path if known (for "open location", "run as admin")
+    std::wstring icon_source; // parsing name whose shell icon is shown; empty: target/path decide
+    std::wstring completion;  // text put into the search box by Tab; empty: title
+    wchar_t glyph = 0;        // Segoe MDL2 Assets glyph drawn when there is no icon source
     ItemKind kind = ItemKind::App;
 
     // Derived search data, filled by prepare().
