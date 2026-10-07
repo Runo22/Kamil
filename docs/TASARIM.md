@@ -1,23 +1,24 @@
 # Kamil — Windows için Offline, Geliştirici Odaklı Başlatıcı
 
-> Durum: **Taslak v0.5** · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
+> Durum: **Taslak v0.6** · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
 
 Alfred'in iş akışını Windows'a, internetsiz bir iş bilgisayarına taşıyan; uygulama/dosya/klasör/LAN
 kaynaklarını anında bulan; script'leri, özel komutları, süreçleri ve CMake projelerinin
 build/debug planlarını tek kısayoldan (`Alt+Space`) yöneten, sürekli arka planda hazır duran bir yardımcı.
 
-### Netleşen kararlar (v0.2 – v0.5)
+### Netleşen kararlar (v0.2 – v0.6)
 
 | Konu | Karar |
 |---|---|
 | İşletim sistemi | Windows 10 22H2 birincil hedef; Win11'de Acrylic + sistem yuvarlak köşeleri otomatik |
-| Dil | C++23 (MSVC 17.10+), gerekirse C++20'ye düşülebilir şekilde |
+| Dil / derleme | C++23, **VS2026** (MSVC v145) hedef; CMake + Ninja, Open Folder. VS2022 ile derlenmesi garanti değil, en iyi çaba |
+| Ayar biçimi | **YAML** (rapidyaml), şema tabanlı ayar altyapısı + kapsamlı Ayarlar penceresi (§9) |
 | Dosya arama | Kendi indeksimiz birincil; **Everything opsiyonel** (kuruluysa ve açıksa kullanılır); yönetici yetkisi olduğu için **MFT/USN indeksleyici** de seçenek |
 | Hariç tutma | Aranmayacak klasör/desenler ayarlardan girilir; her sonuçta "Aramadan çıkar" eylemi |
 | Ayarlar | **Ayrı bir Ayarlar penceresi** (config dosyası yine elle düzenlenebilir) |
 | Projeler | CMake + **Ninja** (tek-config, preset başına bir konfigürasyon); `CMakePresets.json` + CMake File API |
 | VS'te açma | **Open Folder** |
-| VS sürümü | Proje başına tek sürüm (2022 *veya* 2026), ikisi aynı projede kullanılmaz |
+| VS sürümü | **Varsayılan VS2026**; proje başına tek sürüm (2022 *veya* 2026), ikisi aynı projede kullanılmaz |
 | Derleme | **Kamil derlemez**; configure/build/rebuild/clean COM (DTE) ile **varsayılan VS'e (2022 veya 2026)** gönderilir, VS derler |
 | COM port | Exe'ye **komut satırı argümanı** olarak (`--port {com}`) |
 | Test | CTest/test koşturma **kapsam dışı** |
@@ -96,8 +97,8 @@ Seçim mantığı (`index.full_disk = "auto"`): K3 kuruluysa K3 → değilse Eve
 
 ### 2.4 Üçüncü parti (hepsi repoda, offline derlenir)
 
-SQLite (geçmiş/öğrenme), toml++ (config), Dear ImGui (çalışma alanı pencereleri), FreeType
-(ImGui metni), xxHash. Derleme: CMake + MSVC, statik CRT (`/MT`), LTO; çıktı `Kamil.exe` + opsiyonel `KamilIndexer.exe`.
+SQLite (geçmiş/öğrenme), rapidyaml (ayarlar), Dear ImGui (çalışma alanı pencereleri), FreeType
+(ImGui metni), xxHash. Derleme: CMake (`CMakePresets.json`, Ninja) + MSVC v145 (VS2026), statik CRT (`/MT`), LTO; çıktı `Kamil.exe` + opsiyonel `KamilIndexer.exe`.
 
 ---
 
@@ -175,9 +176,11 @@ public:
 
 ```
 %APPDATA%\Kamil\            (taşınabilir modda Kamil.exe yanındaki .\data\)
-  config.toml               ← genel ayarlar (Ayarlar penceresi de buraya yazar; canlı yeniden yükleme)
-  commands.toml             ← özel komutlar
-  projects\*.toml           ← proje/plan tanımları
+  settings.yaml             ← genel ayarlar (Ayarlar penceresi de buraya yazar; canlı yeniden yükleme)
+  commands.yaml             ← özel komutlar
+  bookmarks.yaml            ← sık kullanılanlar / LAN
+  projects\*.yaml           ← proje/plan ekleri
+  schema\*.json             ← otomatik üretilen JSON Schema
   scripts\                  ← script klasörü (otomatik komut olur)
   plugins\                  ← Alfred uyumlu Script Filter eklentileri
   cache\index.bin           ← mmap indeks
@@ -278,46 +281,47 @@ Kilitle, uyku, yeniden başlat, kapat (onaylı), geri dönüşüm kutusu, aygıt
 ### 5.10 Özel komutlar
 
 Kullanıcı tanımlı, başlatıcıda normal sonuç gibi görünen komutlar. Ayarlar → **Komutlar** sekmesinden
-düzenlenir ("Test et" düğmesiyle), `commands.toml`'a yazılır.
+düzenlenir ("Test et" düğmesiyle), `commands.yaml`'a yazılır.
 
-```toml
-[[command]]
-name    = "Logları temizle"
-keyword = "temizle"
-run     = 'del /q "D:\logs\*.log"'
-shell   = "cmd"            # cmd | pwsh | bash | python | direct
-mode    = "console"        # detached | hidden | console | terminal
-confirm = true
-hotkey  = "Ctrl+Alt+L"
+```yaml
+# commands.yaml
+commands:
+  - name: Logları temizle
+    keyword: temizle
+    run: del /q "D:\logs\*.log"
+    shell: cmd              # cmd | pwsh | bash | python | direct
+    mode: console           # detached | hidden | console | terminal
+    confirm: true
+    hotkey: Ctrl+Alt+L
 
-[[command]]
-name    = "Seri monitör"
-keyword = "mon"
-run     = 'D:\tools\putty.exe -serial {com} -sercfg {baud},8,n,1,N'
-shell   = "direct"
-params  = [
-  { name = "com",  type = "comport" },                         # canlı COM listesi
-  { name = "baud", type = "choice", values = ["9600", "115200", "921600"], default = "115200", remember = true },
-]
+  - name: Seri monitör
+    keyword: mon
+    run: D:\tools\putty.exe -serial {com} -sercfg {baud},8,n,1,N
+    shell: direct
+    params:
+      - { name: com,  type: comport }                    # canlı COM listesi
+      - { name: baud, type: choice, values: [9600, 115200, 921600], default: 115200, remember: true }
 
-[[command]]
-name  = "Release'i test PC'ye gönder"
-keyword = "gonder"
-steps = [                                   # zincir: biri başarısız olursa durur
-  { plan = "Sensör/Saha sürümü", action = "build" },
-  { run = 'robocopy "{output_dir}" \\testpc\deploy /mir', shell = "cmd" },
-  { run = 'D:\tools\notify.pyw "Deploy tamam"', shell = "python", mode = "hidden" },
-]
+  - name: Release'i test PC'ye gönder
+    keyword: gonder
+    steps:                  # zincir: biri başarısız olursa durur
+      - { plan: Sensör/Saha sürümü, action: build }
+      - { run: 'robocopy "{output_dir}" \\testpc\deploy /mir', shell: cmd }
+      - { run: 'D:\tools\notify.pyw "Deploy tamam"', shell: python, mode: hidden }
 
-[[action]]                                  # bağlamsal eylem: eşleşen öğelerin Tab menüsüne eklenir
-name = "WinMerge ile karşılaştır"
-when = "*.cpp;*.h;*.txt"
-run  = 'C:\Program Files\WinMerge\WinMergeU.exe "{path}" "{clip}"'
+actions:                    # bağlamsal eylem: eşleşen öğelerin Tab menüsüne eklenir
+  - name: WinMerge ile karşılaştır
+    when: ["*.cpp", "*.h", "*.txt"]
+    run: '"C:\Program Files\WinMerge\WinMergeU.exe" "{path}" "{clip}"'
 ```
+
+> YAML'de Windows yolları için kural: tırnaksız veya **tek tırnak** (`'D:\src'`) kullanılır; çift tırnak
+> içinde `\` kaçış karakteri olduğundan Kamil, çift tırnaklı bir değerde şüpheli kaçış (`"D:\new"` → `\n`)
+> görürse satır numarasıyla uyarır.
 
 - **Parametre tipleri**: `text`, `choice`, `comport`, `file`, `folder`, `project`, `config`, `plan`.
   Parametreli komut seçilince başlatıcı içinde **adım adım soru** sorulur (Raycast "arguments" gibi),
-  `remember = true` son değeri hatırlar. Hızlı yol: `mon COM7 115200` yazıp doğrudan `Enter`.
+  `remember: true` son değeri hatırlar. Hızlı yol: `mon COM7 115200` yazıp doğrudan `Enter`.
 - **Yer tutucular**: `{q}` `{1}..{9}` `{path}` `{dir}` `{name}` `{clip}` `{com}` `{config}` `{preset}`
   `{output}` `{output_dir}` `{project_dir}` `{build_dir}` `{env:VAR}`.
 - Özel komutlar plan adımı (`pre`/`post`) olarak da kullanılabilir.
@@ -345,7 +349,7 @@ derlemeyi VS yapar. Test koşturma (CTest) kapsam dışı.
 ### 7.1 Kavramlar
 
 - **Proje**: `CMakeLists.txt` + `CMakePresets.json` (+ `CMakeUserPresets.json`) içeren klasör.
-  Proje kökleri ayarlardan verilir, projeler **otomatik keşfedilir**; ek ayar gerekirse `projects\*.toml`.
+  Proje kökleri ayarlardan verilir, projeler **otomatik keşfedilir**; ek ayar gerekirse `projects\*.yaml`.
 - **Preset**: configure preset'leri otomatik okunur (`inherits`, `include`, `hidden`, `condition` çözümlenir).
   Ninja tek-config olduğundan **her configure preset'i bir konfigürasyondur** (`x64-debug`, `x64-release`, …).
   Kamil preset'leri sadece **listelemek ve çıktıları bulmak** için okur.
@@ -360,33 +364,31 @@ derlemeyi VS yapar. Test koşturma (CTest) kapsam dışı.
 
 ### 7.2 Proje dosyası (opsiyonel ek ayarlar)
 
-```toml
-# projects\sensor.toml — çoğu alan otomatik keşfedilir, burası sadece eklemeler içindir
-root   = 'D:\src\SensorUI'
-name   = "Sensör Arayüzü"
-alias  = ["sa", "sensor"]
-vs     = "default"                   # default | vs2022 | vs2026
-target = "SensorUI"                  # varsayılan çalıştırılacak hedef
+```yaml
+# projects\sensor.yaml — çoğu alan otomatik keşfedilir, burası sadece eklemeler içindir
+root:   D:\src\SensorUI
+name:   Sensör Arayüzü
+alias:  [sa, sensor]
+vs:     default               # default | vs2022 | vs2026
+target: SensorUI              # varsayılan çalıştırılacak hedef
 
-[args]                               # komut satırı argüman profilleri
-default = "--port {com} --baud 115200"
-trace   = "--port {com} --baud 115200 --log-level trace"
-sim     = "--simulate"
+args:                         # komut satırı argüman profilleri
+  default: --port {com} --baud 115200
+  trace:   --port {com} --baud 115200 --log-level trace
+  sim:     --simulate
 
-[com]
-prefer   = { vid = "0403", pid = "6001" }   # COM numarası değişse de cihazı bulur
-fallback = "COM5"
+com:
+  prefer:   { vid: "0403", pid: "6001" }   # COM numarası değişse de cihazı bulur
+  fallback: COM5
 
-[[plan]]
-name   = "Masa testi"
-preset = "x64-debug"
-args   = "trace"
+plans:
+  - name:   Masa testi
+    preset: x64-debug
+    args:   trace
 
-[[plan]]
-name   = "Saha sürümü"
-preset = "x64-release"
-vs     = "vs2026"
-post   = ["command:Release'i test PC'ye gönder"]
+  - name:   Saha sürümü
+    preset: x64-release
+    post:   ["command:Release'i test PC'ye gönder"]
 ```
 
 Argüman dizesi Windows kurallarına göre (boşluk/tırnak kaçışlarıyla) komut satırına çevrilir;
@@ -568,24 +570,104 @@ Ayarlar ve Konsol pencereleri aynı renk/ölçü tokenlarını kullanır; böyle
 
 ---
 
-## 9. Ayarlar Penceresi
+## 9. Ayarlar: Altyapı ve Pencere
 
-Tray menüsü, `Ctrl+,` veya `ayarlar` yazarak açılır. Sol tarafta sekmeler, sağda form; her değişiklik
-anında uygulanır ve ilgili `.toml` dosyasına yazılır (dosyayı elle düzenlemek de serbest, iki yönlü senkron).
+### 9.1 Biçim: YAML
+
+Tüm ayarlar **YAML** dosyalarındadır (iç içe listeler — komutlar, planlar, sık kullanılanlar — TOML'a
+göre çok daha okunaklı). Ayrıştırıcı: **rapidyaml** (tek başlık, çok hızlı, istisnasız).
+
+```
+%APPDATA%\Kamil\
+  settings.yaml        ← genel ayarlar
+  commands.yaml        ← özel komutlar ve bağlamsal eylemler
+  bookmarks.yaml       ← sık kullanılanlar, LAN, şablonlu bağlantılar
+  projects\*.yaml      ← proje/plan ekleri
+  themes\*.yaml        ← temalar
+  schema\*.json        ← otomatik üretilen JSON Schema (VS Code'da otomatik tamamlama için)
+```
+
+Örnek `settings.yaml`:
+
+```yaml
+# yaml-language-server: $schema=./schema/settings.json
+general:
+  hotkey: Alt+Space
+  start_with_windows: true
+  portable: false
+
+appearance:
+  theme: auto              # auto | dark | light | <tema adı>
+  acrylic: auto            # auto | on | off
+  max_rows: 8
+  animations: true
+
+search:
+  roots:
+    - { path: D:\src,   depth: 8 }
+    - { path: D:\tools, depth: 4 }
+  exclude: [node_modules, .git, .vs, out, build, __pycache__, .venv, "**\\build-*\\**", "*.tmp"]
+  everything: auto         # auto | on | off
+  full_disk: auto          # auto | indexer | everything | off
+
+dev:
+  default_vs: vs2026       # vs2022 | vs2026
+  debug_mode: build_launch_attach   # build_launch_attach | ide_f5 | debugexe
+  build_before_debug: true
+  console: kamil           # kamil | wt | cmd
+```
+
+### 9.2 Şema tabanlı ayar altyapısı
+
+Her ayar C++'ta **tek bir yerde** tanımlanır; okuma, doğrulama, varsayılan değer, Ayarlar penceresindeki
+kontrol, arama, açıklama ve JSON Schema hep bu tanımdan üretilir. Yeni bir ayar eklemek = tek satır.
+
+```cpp
+// settings_schema.cpp
+inline const SettingDef kSettings[] = {
+  { "general.hotkey",       Type::Hotkey, "Alt+Space", "Genel",   "Ana kısayol",
+    "Kamil'i açıp kapatan global kısayol." },
+  { "appearance.max_rows",  Type::Int{ .min = 4, .max = 16 }, 8, "Görünüm", "Görünen satır sayısı" },
+  { "search.exclude",       Type::List<Type::Glob>, kDefaultExcludes, "Arama", "Hariç tutulanlar",
+    "Aranmayacak klasör adları, yollar veya desenler.", Apply::ReindexAffected },
+  { "dev.default_vs",       Type::Enum{ "vs2022", "vs2026" }, "vs2026", "Geliştirme", "Varsayılan Visual Studio" },
+  // ...
+};
+```
+
+| Özellik | Açıklama |
+|---|---|
+| **Tipler** | `bool`, `int`/`float` (aralıklı), `string`, `enum`, `path`, `path_list`, `glob_list`, `hotkey`, `color`, `duration` (`1h`, `30s`), `object_list` (komutlar, planlar, yer imleri — alt şemalı) |
+| **Katmanlar** | varsayılan → `settings.yaml` → proje (`projects\*.yaml`) → plan. Pencerede her değerin **nereden geldiği** gösterilir, "varsayılana dön" tek tık |
+| **Doğrulama** | Yüklemede ve kaydetmede; hatalı dosyada **son geçerli ayar korunur**, hata satır/sütunla tray bildirimi + Ayarlar'da kırmızı satır |
+| **Canlı yeniden yükleme** | Dosya değişince (`ReadDirectoryChangesW`) yeniden okunur; elle düzenleme ile pencere iki yönlü senkron |
+| **Değişiklik dağıtımı** | Değiştirilemez ayar anlık görüntüsü (`std::shared_ptr<const Settings>`) atomik olarak değiştirilir → arama yolunda kilitsiz okuma. Modüller `subscribe("search.*", cb)` ile sadece ilgili değişikliği alır; her ayarın `Apply` politikası var (anında / indeksi güncelle / kısayolu yeniden kaydet / yeniden başlatma gerekli) |
+| **Yorumları koruyarak yazma** | Ayarlar penceresi dosyayı baştan yazmaz: değişen değerin dosyadaki konumu (rapidyaml konum bilgisi) bulunup sadece o metin değiştirilir; ekleme/silme blok bazında yapılır. Elle yazılmış yorumlar ve düzen bozulmaz |
+| **Yedek** | Her kaydetmede `settings.yaml.bak1…5` döner yedek; Ayarlar → Tanılama'dan geri yükleme |
+| **İçe/dışa aktarma** | Tüm ayarları tek `.zip` veya tek birleşik `.yaml` olarak; başka PC'ye taşıma |
+| **JSON Schema** | Şemadan otomatik üretilir; VS Code'da (YAML eklentisiyle) otomatik tamamlama ve hata gösterimi |
+
+### 9.3 Ayarlar penceresi
+
+Tray menüsü, `Ctrl+,` veya `ayarlar` yazarak açılır. Solda sekmeler, üstte **tüm ayarlarda arama**
+(VS Code ayarları gibi: "kısayol" yazınca ilgili tüm ayarlar listelenir), sağda şemadan üretilen form.
+Başlatıcıdan da doğrudan gidilebilir: `ayar hariç` → Arama → Hariç tutulanlar.
 
 | Sekme | İçerik |
 |---|---|
 | **Genel** | Ana kısayol (tuş kaydedici), Windows ile başlat, taşınabilir mod, dil, animasyonlar |
-| **Görünüm** | Tema (otomatik/koyu/açık), Acrylic aç/kapa, vurgu rengi, satır sayısı, yazı boyutu, canlı önizleme |
-| **Arama** | İndeks kökleri (derinlik), **hariç tutulanlar** (yol/ad/glob/uzantı), Everything (otomatik/açık/kapalı + durum), KamilIndexer kur/kaldır, ağ kökleri ve TTL, indeks istatistikleri, "yeniden indeksle" |
+| **Görünüm** | Tema (otomatik/koyu/açık), Acrylic, vurgu rengi, satır sayısı, yazı boyutu, **canlı önizleme** |
+| **Arama** | İndeks kökleri (derinlik), **hariç tutulanlar** (yol/ad/glob/uzantı; "test et": bir yol yazınca hariç mi gösterir), Everything, KamilIndexer kur/kaldır, ağ kökleri ve TTL, indeks istatistikleri, "yeniden indeksle" |
 | **Sık kullanılanlar** | Klasör / UNC / URL / şablonlu bağlantı listesi, takma adlar, erişilebilirlik testi |
-| **Komutlar** | Özel komut ve bağlamsal eylem düzenleyici: ad, anahtar kelime, komut, kabuk, mod, parametreler, kısayol, **Test et** |
+| **Komutlar** | Özel komut ve bağlamsal eylem düzenleyici: liste + ayrıntı formu, parametre düzenleyici, yer tutucu yardımı, **Test et** (çıktı Konsol'da) |
 | **Script'ler** | Script klasörleri, uzantı → yorumlayıcı eşlemesi (python/venv, bash) |
 | **Kısayollar** | Tüm global kısayolların tek listesi, çakışma uyarısı |
-| **Projeler** | Proje kökleri, keşfedilen projeler, plan düzenleyici, argüman profilleri, COM tercihleri, varsayılan debug modu |
-| **Araç zincirleri** | Bulunan VS kurulumları (2022/2026), **varsayılan VS seçimi**, açık örnekler, CMake komut eşlemeleri (otomatik bulunan / elle), Developer terminali |
+| **Projeler** | Proje kökleri, keşfedilen projeler, plan düzenleyici, argüman profilleri (önizlemeli), COM tercihleri |
+| **Geliştirme** | **Varsayılan VS (2026)**, bulunan kurulumlar, açık örnekler, debug modu, build-before-debug, CMake komut eşlemeleri, Konsol tercihi |
 | **Öğrenme** | Öğrenilen eşleşmeleri görüntüle/sil, sıfırla, tahminleri aç/kapa |
-| **Tanılama** | Performans ölçümleri (açılış, tuş başı gecikme p50/p99), bellek, günlükler |
+| **Tanılama** | Performans ölçümleri (açılış, tuş başı gecikme p50/p99), bellek, günlükler, ayar yedekleri |
+
+Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılana dön**, hata/uyarı sayacı.
 
 ---
 
@@ -595,7 +677,7 @@ anında uygulanır ve ilgili `.toml` dosyasına yazılır (dosyayı elle düzenl
 - Klavye hook'u, kod enjeksiyonu, sürücü yok.
 - Yönetici gerektiren tek parça (KamilIndexer) ayrı, isteğe bağlı ve sadece named pipe üzerinden,
   sadece aynı kullanıcının Kamil sürecinden komut kabul eder (pipe ACL + istemci PID doğrulaması).
-- Yıkıcı eylemlerde (kill, kapat, `confirm = true` komutlar) onay; kritik sistem süreçleri gizli.
+- Yıkıcı eylemlerde (kill, kapat, `confirm: true` komutlar) onay; kritik sistem süreçleri gizli.
 
 ---
 
@@ -603,13 +685,13 @@ anında uygulanır ve ilgili `.toml` dosyasına yazılır (dosyayı elle düzenl
 
 | Faz | Kapsam | Çıktı |
 |---|---|---|
-| **0 – İskelet** | Tray, `Alt+Space`, D2D pencere (Win10 düz + yuvarlak köşe, Win11 Acrylic), uygulama sağlayıcı, bulanık eşleştirme, başlatma, `config.toml` | Kullanılabilir mini başlatıcı |
+| **0 – İskelet** | Tray, `Alt+Space`, D2D pencere (Win10 düz + yuvarlak köşe, Win11 Acrylic), uygulama sağlayıcı, bulanık eşleştirme, başlatma, **ayar altyapısının çekirdeği** (şema, YAML okuma/doğrulama, canlı yeniden yükleme) | Kullanılabilir mini başlatıcı |
 | **1 – Build / Debug (öncelik)** | `vs-probe` doğrulaması, vswhere + varsayılan VS, DTE köprüsü (örnek bulma, build/configure tetikleme, bitiş izleme, Output'tan hata listesi), CMakePresets + File API, proje keşfi, plan modeli + son plan hafızası, Konsol penceresi (çalıştırma sekmeleri), preset başına çalıştırma, Debug (VS'te derle + başlat + bağlan, IDE içi F5, DebugExe), COM port servisi + çoklu örnekte port atama | Günlük build/debug kullanımı |
-| **2 – Ayarlar & Özel komutlar** | Ayarlar penceresi (tüm sekmelerin ilk sürümü), özel komutlar + parametre soruları + zincirler, script klasörleri, global öğe kısayolları, hariç tutma düzenleyici | Kodsuz yapılandırma |
+| **2 – Ayarlar & Özel komutlar** | Ayarlar penceresi (şemadan üretilen form, arama, katman gösterimi, yorum koruyarak yazma, yedek), özel komutlar + parametre soruları + zincirler, script klasörleri, global öğe kısayolları, hariç tutma düzenleyici | Kodsuz yapılandırma |
 | **3 – Arama genişlemesi** | Dosya indeksi + mmap önbellek + watcher, ikon önbelleği, sık kullanılanlar/LAN/şablonlu bağlantılar, Everything (opsiyonel), tam eylem paneli | Alfred eşdeğeri arama |
 | **4 – Akıllanma & araçlar** | Öğrenme/tahmin, kill/lock/port/err/hesap, KamilIndexer (MFT/USN), Alfred eklentileri, tema dosyaları | Tam sürüm |
 
-Not: Faz 1 için gereken minimal ayarlar (proje kökleri, varsayılan VS) başlangıçta `config.toml`'dan
+Not: Faz 1 için gereken minimal ayarlar (proje kökleri, varsayılan VS) başlangıçta `settings.yaml`'dan
 okunur; Faz 2'de Ayarlar penceresine taşınır.
 
 Her fazda `kamil-bench` ile performans hedefleri (§1) ölçülür; gerileme CI'da yakalanır.
