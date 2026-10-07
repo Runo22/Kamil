@@ -1,7 +1,6 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
-#include <thread>
 
 #include "core/cmake.h"
 #include "test.h"
@@ -65,8 +64,9 @@ TEST(cmake_presets_visual_studio_template) {
     CHECK_EQ(r.presets[3].display_name, std::string("Benim"));
 
     // The Linux preset appears on Linux, with $env{} expanded.
-    EnvLookup env = [](std::string_view n) -> std::optional<std::string> {
-        if (n == "BUILD_ROOT") return std::string("/tmp/builds");
+    const fs::path build_root = fs::temp_directory_path() / "builds";  // absolute on every platform
+    EnvLookup env = [&](std::string_view n) -> std::optional<std::string> {
+        if (n == "BUILD_ROOT") return build_root.string();
         return std::nullopt;
     };
     auto linux_r = load_cmake_presets(src, env, "Linux");
@@ -74,7 +74,7 @@ TEST(cmake_presets_visual_studio_template) {
     for (const auto& p : linux_r.presets)
         if (p.name == "linux-debug") {
             found = true;
-            CHECK(p.binary_dir == fs::path("/tmp/builds/kamil_test_presets-linux-debug").make_preferred());
+            CHECK(p.binary_dir == (build_root / "kamil_test_presets-linux-debug").lexically_normal().make_preferred());
         }
     CHECK(found);
     fs::remove_all(src);
@@ -125,8 +125,10 @@ TEST(cmake_file_api_and_active_preset) {
     presets[1].name = "x64-release";
     presets[1].binary_dir = release;
     CHECK(guess_active_preset(presets) == std::optional<size_t>(0));
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
     write(release / "CMakeCache.txt", "# newer configure\n");
+    // Explicit times: file systems differ in timestamp resolution.
+    fs::last_write_time(release / "CMakeCache.txt",
+                        fs::last_write_time(reply / "index-2026-10-07T10-00-00-0000.json") + std::chrono::seconds(10));
     CHECK(guess_active_preset(presets) == std::optional<size_t>(1));
     fs::remove_all(src);
 }
