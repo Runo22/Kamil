@@ -1,12 +1,12 @@
 # Kamil — Windows için Offline, Geliştirici Odaklı Başlatıcı
 
-> Durum: **Taslak v0.2** · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake**
+> Durum: **Taslak v0.3** · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
 
 Alfred'in iş akışını Windows'a, internetsiz bir iş bilgisayarına taşıyan; uygulama/dosya/klasör/LAN
 kaynaklarını anında bulan; script'leri, özel komutları, süreçleri ve CMake projelerinin
 build/debug planlarını tek kısayoldan (`Alt+Space`) yöneten, sürekli arka planda hazır duran bir yardımcı.
 
-### v0.2'de netleşen kararlar
+### Netleşen kararlar (v0.2 – v0.3)
 
 | Konu | Karar |
 |---|---|
@@ -15,9 +15,12 @@ build/debug planlarını tek kısayoldan (`Alt+Space`) yöneten, sürekli arka p
 | Dosya arama | Kendi indeksimiz birincil; **Everything opsiyonel** (kuruluysa ve açıksa kullanılır); yönetici yetkisi olduğu için **MFT/USN indeksleyici** de seçenek |
 | Hariç tutma | Aranmayacak klasör/desenler ayarlardan girilir; her sonuçta "Aramadan çıkar" eylemi |
 | Ayarlar | **Ayrı bir Ayarlar penceresi** (config dosyası yine elle düzenlenebilir) |
-| Projeler | CMake (`CMakePresets.json` + CMake File API) |
+| Projeler | CMake + **Ninja** (tek-config, preset başına bir konfigürasyon); `CMakePresets.json` + CMake File API |
+| VS'te açma | **Open Folder**; Kamil ve VS aynı build klasörünü ve VS'in paketlediği CMake/Ninja'yı kullanır |
+| COM port | Exe'ye **komut satırı argümanı** olarak (`--port {com}`) |
+| Test | CTest/test koşturma **kapsam dışı** |
 | VS entegrasyonu | VS2022 / VS2026, COM (DTE) otomasyonu ile build / configure / debug |
-| Öncelik | **Build / Debug / Çalıştır / COM port** akışı ilk geliştirilecek bölüm (test aşamasında yoğun kullanım) |
+| Öncelik | **Build / Debug / Çalıştır / COM port** akışı ilk geliştirilecek bölüm |
 | Özel komutlar | Parametreli, kısayol atanabilir, zincirlenebilir kullanıcı komutları |
 | Kısayol | `Alt+Space` |
 | Görünüm | Sade, az öğeli, sistem temasına uyumlu |
@@ -114,7 +117,7 @@ SQLite (geçmiş/öğrenme), toml++ (config), Dear ImGui (çalışma alanı penc
 │                           └─────────────────┘   └──────────────────────────────────────┘          │
 │  ┌──────────────────────────────────────────────────────────────────────────────────────┐        │
 │  │ Dev Services: Toolchain (vswhere + env önbelleği) · CMake (presets, File API) ·         │        │
-│  │ Job Runner (build/run/test, çoklu sekme) · VS Bridge (DTE 17/18) · Device Watcher (COM) │        │
+│  │ Job Runner (build/run, çoklu sekme)     · VS Bridge (DTE 17/18) · Device Watcher (COM) │        │
 │  └──────────────────────────────────────────────────────────────────────────────────────┘        │
 │  ┌──────────────────────────────────┐                                                              │
 │  │ Workbench (ImGui, istek üzerine): │◀── Ayarlar · Konsol · Plan düzenleyici                     │
@@ -178,7 +181,7 @@ public:
   cache\index.bin           ← mmap indeks
   cache\icons.bin           ← ikon atlası
   kamil.db                  ← SQLite: geçmiş, öğrenme, son planlar, VS ortam önbelleği
-  logs\jobs\*.log           ← build/çalıştırma/test çıktıları
+  logs\jobs\*.log           ← build/çalıştırma çıktıları
 ```
 
 ---
@@ -332,22 +335,37 @@ Erişilemeyen bir UNC yol Windows'ta 20–30 sn SMB zaman aşımına yol açar. 
 
 ## 7. CMake Projeleri, Planlar, Build/Debug ve COM Port (öncelikli bölüm)
 
+**Çalışma şekli:** VS'te projeler **Open Folder** ile açılıyor, generator **Ninja** (tek-config),
+COM port exe'ye **komut satırı argümanı** olarak veriliyor. Test koşturma (CTest) kapsam dışı.
+
 ### 7.1 Kavramlar
 
 - **Proje**: `CMakeLists.txt` + `CMakePresets.json` (+ `CMakeUserPresets.json`) içeren klasör.
   Proje kökleri ayarlardan verilir, projeler **otomatik keşfedilir**; ek ayar gerekirse `projects\*.toml`.
-- **Preset**: configure/build/test preset'leri otomatik okunur (`inherits`, `include`, `hidden`,
-  `condition` çözümlenir). Preset yoksa Kamil kendi varsayılanlarını üretir.
-- **Konfigürasyon**: multi-config generator (VS, Ninja Multi-Config) için `Debug/Release/RelWithDebInfo…`;
-  tek-config için preset başına bir konfigürasyon.
-- **Hedef (target)**: çalıştırılabilir hedefler ve çıktı yolları **CMake File API** ile kesin olarak bilinir
-  (Kamil configure öncesi `.cmake/api/v1/query/codemodel-v2` sorgusunu yazar; yanıt JSON'u konfigürasyon
-  başına exe/pdb yollarını verir). Elle yol yazmaya gerek kalmaz.
+- **Preset**: configure/build preset'leri otomatik okunur (`inherits`, `include`, `hidden`,
+  `condition` çözümlenir). Ninja tek-config olduğundan **her configure preset'i bir konfigürasyondur**
+  (`x64-debug`, `x64-release`, …).
+- **Hedef (target)**: çalıştırılabilir hedefler ve çıktı yolları **CMake File API** ile kesin olarak bilinir.
+  VS Open Folder zaten File API kullandığı için build klasöründe yanıt hazır bulunur; Kamil ayrıca kendi
+  istemci sorgusunu (`.cmake/api/v1/query/client-kamil/codemodel-v2`) ekler. Elle yol yazmaya gerek kalmaz.
 - **Araç zinciri**: `vs2022` (17.x), `vs2026` (18.x) — `vswhere.exe` ile bulunur.
-- **Plan** = `preset/konfigürasyon + hedef + araç zinciri + COM port + argüman profili + çalışma dizini + ön/son adımlar`.
+- **Plan** = `preset + hedef + araç zinciri + COM port + argüman profili + çalışma dizini + ön/son adımlar`.
   Proje başına **son seçili plan** ve global olarak **aktif proje** hatırlanır.
 
-### 7.2 Proje dosyası (opsiyonel ek ayarlar)
+### 7.2 VS Open Folder ile uyum
+
+Kamil ve VS **aynı build klasörünü** (`binaryDir`, ör. `out\build\x64-debug`) paylaşır; böylece Kamil'in
+derlediğini VS, VS'in derlediğini Kamil görür, iki kez derleme olmaz. Bunun için:
+
+| Konu | Kural |
+|---|---|
+| CMake / Ninja sürümü | Seçili VS'in **kendi paketlediği** `cmake.exe` ve `ninja.exe` kullanılır (`Common7\IDE\CommonExtensions\Microsoft\CMake\…`). Farklı CMake sürümü önbelleği bozar / gereksiz yeniden configure yaptırır. |
+| Configure argümanları | Preset neyse o; Kamil ek `-D` vermez (VS ile önbellek uyuşmazlığı olmasın). |
+| Eşzamanlı build | Aynı klasörde iki Ninja aynı anda çalışmamalı. Kamil build öncesi DTE ile VS'in build durumuna bakar; VS derliyorsa bekler veya uyarır. Kamil derlerken VS'in otomatik configure'u tetiklenirse sıraya alınır. |
+| VS2022 ↔ VS2026 | İki sürüm aynı build klasörünü farklı CMake sürümüyle kullanırsa çakışır. Plan araç zincirini değiştirince Kamil uyarır; öneri: sürüm başına ayrı preset (`x64-debug-vs26` gibi, `binaryDir` farklı). |
+| Argümanlar | VS içinden F5 de aynı argümanlarla çalışsın diye Kamil isteğe bağlı olarak `.vs\launch.vs.json`'daki ilgili hedefin `args` alanını plan argümanlarıyla günceller. |
+
+### 7.3 Proje dosyası (opsiyonel ek ayarlar)
 
 ```toml
 # projects\sensor.toml — çoğu alan otomatik keşfedilir, burası sadece eklemeler içindir
@@ -357,7 +375,7 @@ alias     = ["sa", "sensor"]
 toolchain = "vs2022"                 # vs2022 | vs2026 | auto
 target    = "SensorUI"               # varsayılan çalıştırılacak hedef
 
-[args]                               # argüman profilleri
+[args]                               # komut satırı argüman profilleri
 default = "--port {com} --baud 115200"
 trace   = "--port {com} --baud 115200 --log-level trace"
 sim     = "--simulate"
@@ -378,89 +396,99 @@ toolchain = "vs2026"
 post      = ["command:Release'i test PC'ye gönder"]
 ```
 
-### 7.3 Araç zinciri ve ortam önbelleği
+Argüman dizesi Windows kurallarına göre (boşluk/tırnak kaçışlarıyla) komut satırına çevrilir;
+`{com}` yerine planın port'u (`COM7`) yerleştirilir. Önizleme her zaman satırın alt bilgisinde görünür.
+
+### 7.4 Araç zinciri ve ortam önbelleği
 
 - `vswhere -all -prerelease -format json` → kurulumlar; `installationVersion` 17.x = 2022, 18.x = 2026.
-- Ninja/Ninja Multi-Config için gerekli MSVC ortamı: `VsDevCmd.bat -arch=amd64 -host_arch=amd64`
-  bir kez çalıştırılır, ortam farkı `kamil.db`'de saklanır (anahtar: kurulum yolu + sürüm + mimari).
-  VS güncellenince otomatik yenilenir. Sonuç: her build'de vcvars beklemesi yok.
-- VS generator kullanan preset'lerde generator adı araç zincirinden seçilir
-  (`Visual Studio 17 2022` / `Visual Studio 18 2026`).
+- Ninja için gerekli MSVC ortamı: `VsDevCmd.bat -arch=amd64 -host_arch=amd64` bir kez çalıştırılır,
+  ortam farkı `kamil.db`'de saklanır (anahtar: kurulum yolu + sürüm + mimari). VS güncellenince
+  otomatik yenilenir. Sonuç: her build'de 1–2 sn'lik vcvars beklemesi yok.
+- Preset'teki `architecture`/`toolset` (`strategy: external`) değerleri ortam seçiminde dikkate alınır
+  (VS Open Folder ile aynı davranış).
 
-### 7.4 Proje görünümü
+### 7.5 Proje görünümü
 
 `sa` yazınca (sade görünüm, ikonlar Segoe MDL2/Fluent):
 
 ```
   Sensör Arayüzü                       Masa testi · x64-debug · VS2022 · COM7 FTDI
   ─────────────────────────────────────────────────────────────────────────────
-  ▶  Çalıştır    SensorUI · Debug           derlendi 12 dk önce              ↵
-  ▶  Çalıştır    SensorUI · Release         derlendi dün 17:40
-  ▶  Çalıştır    SensorUI · RelWithDebInfo  derlenmemiş
-  ⬢  Debug       VS2022 · Debug             açık VS örneğine bağlanır       Alt+D
-  ⬢  Debug       VS2026 · Debug             yeni örnek açılır
+  ▶  Çalıştır    SensorUI · x64-debug       derlendi 12 dk önce              ↵
+  ▶  Çalıştır    SensorUI · x64-release     derlendi dün 17:40
+  ▶  Çalıştır    SensorUI · x64-relwithdeb  derlenmemiş
+  ⬢  Debug       VS2022 · x64-debug         açık VS örneğine bağlanır       Alt+D
+  ⬢  Debug       VS2026 · x64-debug         yeni örnek açılır
   ⚒  Build       x64-debug                                                  Alt+B
   ⚒  Configure   x64-debug                  CMakeCache 2 sa önce
-  ✓  Test        ctest x64-debug            son: 41/42 geçti
-  ⋯  Plan değiştir · COM port · Tüm konfigürasyonları derle · Çıktı klasörü
+  ⋯  Plan değiştir · COM port · Tüm preset'leri derle · Çıktı klasörü · VS'te aç
 ```
 
-- **Her konfigürasyonun çıktısı ayrı satır**: var mı, ne zaman derlendi, sürüm bilgisi.
-- **Ayrı ayrı çalıştırma**: `Space` ile birden çok konfigürasyon işaretlenip birlikte çalıştırılır;
-  her biri **Konsol penceresinde ayrı sekmede** (ya da tercihe göre Windows Terminal/cmd sekmesinde).
+- **Her preset'in çıktısı ayrı satır**: var mı, ne zaman derlendi, sürüm bilgisi.
+- **Ayrı ayrı çalıştırma**: `Space` ile birden çok preset işaretlenip birlikte çalıştırılır; her biri
+  **Konsol penceresinde ayrı sekmede** (ya da tercihe göre Windows Terminal/cmd sekmesinde).
+- **Aynı anda çalışan örnekler ve COM port**: bir port aynı anda tek süreçte açılabildiği için Kamil
+  her örneğe **ayrı port** atar (ilk örneğe tercih edilen cihaz, diğerlerine kalan portlar; başlatmadan
+  önce düzenlenebilir liste). Yeterli port yoksa uyarır ve kalanları **sırayla** çalıştırmayı önerir.
+  Argümanında `{com}` geçmeyen profiller (ör. `sim`) bu kısıta takılmaz.
 - Çalışan exe build'i kilitliyorsa build öncesi "çalışan örneği kapat?" (Restart Manager).
 - Plan değiştirme `Ctrl+P`; seçim anında kaydedilir.
 
-### 7.5 İşler (Job Runner) ve Konsol penceresi
+### 7.6 İşler (Job Runner) ve Konsol penceresi
 
 | İş | Komut |
 |---|---|
-| Configure | `cmake --preset <p>` (File API sorgusu eklenmiş) |
-| Build | `cmake --build --preset <p> [--config <c>] [--target <t>]` |
+| Configure | `cmake --preset <p>` (VS'in cmake.exe'si, önbellekli MSVC ortamı) |
+| Build | `cmake --build --preset <p> [--target <t>]` ya da doğrudan `ninja -C <binaryDir> <t>` |
 | Rebuild / Clean | `--clean-first` / `--target clean` |
-| Test | `ctest --preset <p> [-R desen]` |
+| Yeniden configure | `CMakeCache.txt` silinip configure (VS'teki "Delete Cache and Reconfigure" eşdeğeri) |
 | Çalıştır | `CreateProcess` (plan argümanları, çalışma dizini, ortam) |
 
 **Konsol penceresi** (ImGui, istek üzerine açılır):
-- Her iş bir sekme: build, her çalıştırma, test. Canlı çıktı, ANSI renkleri, arama, çıkış kodu, süre.
+- Her iş bir sekme: build ve her çalıştırma. Canlı çıktı, ANSI renkleri, arama, çıkış kodu, süre.
 - `dosya(satır,sütun): error C2065: …` satırları **hata listesine** dönüşür → çift tık ile açık VS'te
   (DTE `ItemOperations.OpenFile` + `GotoLine`) veya VS Code'da (`code -g`) ilgili satır.
-- CTest sonuçları geçti/kaldı listesi; **"sadece başarısızları tekrar çalıştır"**.
+- Ninja `[37/120]` ilerlemesi sekme başlığında yüzde olarak gösterilir.
 - Çalışan süreç için: durdur, yeniden başlat (aynı planla), **"VS ile bağlan"** (attach).
 - Bitişte tray bildirimi: "✓ x64-release — 0 hata, 3 uyarı, 41 sn". Günlükler `logs\jobs\`.
 
-### 7.6 Visual Studio köprüsü (VS2022 / VS2026, COM/DTE)
+### 7.7 Visual Studio köprüsü (VS2022 / VS2026, COM/DTE)
 
 VS, Running Object Table'a `!VisualStudio.DTE.17.0:<pid>` (2022) / `!VisualStudio.DTE.18.0:<pid>`
-(2026) adlarıyla kayıtlıdır. Kamil açık örnekleri tarar ve açık klasörü/çözümü proje köküyle eşleştirir.
+(2026) adlarıyla kayıtlıdır. Kamil açık örnekleri tarar ve Open Folder ile açılmış klasörü
+(`DTE.Solution.FullName`) proje köküyle eşleştirir.
 
-**Debug akışı (önerilen: "başlat + bağlan"):**
-1. (Plan ayarına göre) önce build.
+**Debug akışı (varsayılan: "başlat + bağlan"):**
+1. (Plan ayarına göre) önce Kamil build eder.
 2. Exe, plan argümanları (`--port COM7 …`) ve çalışma diziniyle **`CREATE_SUSPENDED`** olarak başlatılır.
-3. Seçilen sürümdeki VS örneği bulunur (yoksa proje klasörüyle açılır ve hazır olması beklenir).
+3. Seçilen sürümdeki VS örneği bulunur; yoksa `devenv.exe <proje klasörü>` ile Open Folder olarak açılır
+   ve DTE hazır olana kadar beklenir.
 4. DTE `Debugger.LocalProcesses` → PID → `Attach2("Native")`.
 5. Ana thread devam ettirilir → `main`'deki breakpoint'ler dahil hepsi tutar. VS öne getirilir.
 
-Bu yöntem VS'te projenin **Open Folder (CMake)** ile mi yoksa üretilmiş `.sln` ile mi açıldığından
-bağımsız çalışır; argümanlar ve COM port tamamen Kamil'in kontrolündedir.
+Bu yöntem Open Folder'da VS'in o an seçili preset'inden / başlangıç öğesinden **bağımsızdır**: hangi
+exe'nin hangi argümanla debug edileceğini tamamen plan belirler. (Open Folder'da aktif preset'i DTE ile
+değiştirmenin güvenilir bir yolu olmadığı için bu kritik.)
 
 **Diğer modlar:**
 
 | Mod | Ne yapar |
 |---|---|
-| `devenv /DebugExe <exe> <args>` | VS açık değilse en hızlı yol; yeni örnek exe'yi doğrudan debug eder |
-| IDE içi debug | `.vs\launch.vs.json`'a plan argümanlarını yazar + DTE `ExecuteCommand("Debug.Start")` (VS'in kendi hedef/konfigürasyon seçimiyle) |
+| `devenv /DebugExe <exe> <args>` | VS açık değilse en hızlı yol; klasör açmadan exe'yi doğrudan debug eder |
+| IDE içi F5 | `launch.vs.json` argümanlarını günceller + DTE `ExecuteCommand("Debug.Start")` (VS'te seçili preset/hedef ile) |
 | IDE içi build | DTE `ExecuteCommand("Build.BuildAll")` |
 | Hataya git | DTE ile dosya + satır aç |
 | Debug'ı durdur / yeniden başlat | DTE `Debugger.Stop()` / akışı tekrarla |
 
-### 7.7 COM port yönetimi
+### 7.8 COM port yönetimi
 
 - `SetupDiGetClassDevs(GUID_DEVINTERFACE_COMPORT)` ile **dostu adlar** ("USB Serial Port (COM7) — FTDI FT232R");
   `WM_DEVICECHANGE` ile canlı güncelleme.
 - **Cihaz kimliğiyle hatırlama** (VID/PID/seri no): COM numarası değişse de plan doğru cihazı seçer.
 - Tek yeni cihaz takılınca otomatik atama + bildirim ("COM9 takıldı → Sensör / Masa testi").
 - Portu meşgul eden süreç gösterilir (KamilIndexer ile handle taraması) → tek tuşla kapat.
+  Debug/çalıştır öncesi port meşgulse sorulur.
 - `com` komutu: liste, PuTTY/Tera Term ile aç (özel komutlarla genişletilebilir).
 
 ---
@@ -548,7 +576,7 @@ anında uygulanır ve ilgili `.toml` dosyasına yazılır (dosyayı elle düzenl
 | **Script'ler** | Script klasörleri, uzantı → yorumlayıcı eşlemesi (python/venv, bash) |
 | **Kısayollar** | Tüm global kısayolların tek listesi, çakışma uyarısı |
 | **Projeler** | Proje kökleri, keşfedilen projeler, plan düzenleyici, argüman profilleri, COM tercihleri, varsayılan debug modu |
-| **Araç zincirleri** | Bulunan VS kurulumları (2022/2026), ortam önbelleğini yenile, CMake/Ninja yolları |
+| **Araç zincirleri** | Bulunan VS kurulumları (2022/2026), her birinin CMake/Ninja yolu ve sürümü, ortam önbelleğini yenile |
 | **Öğrenme** | Öğrenilen eşleşmeleri görüntüle/sil, sıfırla, tahminleri aç/kapa |
 | **Tanılama** | Performans ölçümleri (açılış, tuş başı gecikme p50/p99), bellek, günlükler |
 
@@ -569,7 +597,7 @@ anında uygulanır ve ilgili `.toml` dosyasına yazılır (dosyayı elle düzenl
 | Faz | Kapsam | Çıktı |
 |---|---|---|
 | **0 – İskelet** | Tray, `Alt+Space`, D2D pencere (Win10 düz + yuvarlak köşe, Win11 Acrylic), uygulama sağlayıcı, bulanık eşleştirme, başlatma, `config.toml` | Kullanılabilir mini başlatıcı |
-| **1 – Build / Debug (öncelik)** | vswhere + ortam önbelleği, CMakePresets + File API, proje keşfi, plan modeli + son plan hafızası, Job Runner + Konsol penceresi (sekmeler, hata listesi), konfigürasyon başına çalıştırma, Debug VS2022/VS2026 (başlat+bağlan, DebugExe), COM port servisi, CTest | Test aşamasında günlük kullanım |
+| **1 – Build / Debug (öncelik)** | vswhere + ortam önbelleği, CMakePresets + File API, proje keşfi, plan modeli + son plan hafızası, Job Runner + Konsol penceresi (sekmeler, hata listesi), konfigürasyon başına çalıştırma, Debug VS2022/VS2026 (başlat+bağlan, DebugExe), `launch.vs.json` senkronu, COM port servisi + çoklu örnekte port atama | Günlük build/debug kullanımı |
 | **2 – Ayarlar & Özel komutlar** | Ayarlar penceresi (tüm sekmelerin ilk sürümü), özel komutlar + parametre soruları + zincirler, script klasörleri, global öğe kısayolları, hariç tutma düzenleyici | Kodsuz yapılandırma |
 | **3 – Arama genişlemesi** | Dosya indeksi + mmap önbellek + watcher, ikon önbelleği, sık kullanılanlar/LAN/şablonlu bağlantılar, Everything (opsiyonel), tam eylem paneli | Alfred eşdeğeri arama |
 | **4 – Akıllanma & araçlar** | Öğrenme/tahmin, kill/lock/port/err/hesap, KamilIndexer (MFT/USN), Alfred eklentileri, tema dosyaları | Tam sürüm |
@@ -583,11 +611,7 @@ Her fazda `kamil-bench` ile performans hedefleri (§1) ölçülür; gerileme CI'
 
 ## 12. Kalan Açık Sorular
 
-1. VS'te CMake projelerini **Open Folder** (CMakePresets) ile mi açıyorsun, yoksa CMake ile `.sln` üretip mi?
-   ("Başlat + bağlan" ikisinde de çalışır; IDE içi build/debug modunu buna göre ayarlarız.)
-2. Generator: **Ninja** mı, **Visual Studio** generator mı?
-3. Exe COM portu nasıl alıyor: komut satırı argümanı mı, kendi config dosyası mı, yoksa ortam değişkeni mi?
-   (Config dosyasıysa plan, çalıştırmadan önce o dosyayı güncelleyecek bir adım ekler.)
-4. Testleri CTest ile mi koşuyorsun, yoksa exe'yi farklı argümanlarla elle mi çalıştırıyorsun?
-5. Birden fazla konfigürasyon aynı anda çalışınca aynı COM portu kullanamaz — her konfigürasyona ayrı port
-   mu atanmalı, yoksa sırayla mı çalıştırılmalı?
+1. Aynı anda birden çok örnek çalıştırırken varsayılan davranış (§7.5: her örneğe ayrı port, yetmezse sırayla)
+   uygun mu?
+2. VS2022 ve VS2026'yı **aynı projede** dönüşümlü kullanıyor musun? Kullanıyorsan sürüm başına ayrı
+   preset/build klasörü önerisi (§7.2) senin için kabul edilebilir mi?
