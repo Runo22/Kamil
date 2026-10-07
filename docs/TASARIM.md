@@ -1,6 +1,6 @@
 # Kamil — Windows için Offline, Geliştirici Odaklı Başlatıcı
 
-> Durum: **Taslak v0.7** · Uygulama: **Faz 0 + git entegrasyonu kodlandı** (bkz. README) · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
+> Durum: **Taslak v0.8** · Uygulama: **Faz 0 + git + Faz 1 build/debug/çalıştır kodlandı** (bkz. README) · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
 
 Alfred'in iş akışını Windows'a, internetsiz bir iş bilgisayarına taşıyan; uygulama/dosya/klasör/LAN
 kaynaklarını anında bulan; script'leri, özel komutları, süreçleri ve CMake projelerinin
@@ -478,6 +478,23 @@ VS, Running Object Table'a `!VisualStudio.DTE.17.0:<pid>` (2022) / `!VisualStudi
   ayrıştırılır → "✓ x64-release — 0 hata, 3 uyarı, 41 sn" veya hata listesi (Enter → VS'te o satır).
 - Ek doğrulama: hedef exe'nin değişiklik zamanı build başlangıcından yeni mi.
 
+### 7.3a Araştırma notları ve sağlamlaştırma (v0.8)
+
+`vs-probe` çıktısı yerine kamuya açık bilgilerle ilerlendi; belirsiz noktalar çalışma anında keşfedilir:
+
+| Konu | Bilinen | Kamil'in yaklaşımı |
+|---|---|---|
+| CMake komut adları (Configure/Generate Cache, Delete Cache and Reconfigure) | Menüde var, DTE adları belgelenmemiş | VS'in `DTE.Commands` tablosunda adında `GenerateCache`/`ConfigureCache`/`DeleteCache` geçen komut aranır, örnek başına önbelleklenir; `dev.vs_configure_command` ile elle verilebilir |
+| `Build.BuildAll` | `ExecuteCommand` devre dışı komutu çalıştırmaz | CMake hazırlanırken komut reddedilir → 1 sn aralıkla 5 dk'ya kadar yeniden denenir |
+| Build bitişi | `SolutionBuild.BuildState` (1/2/3); Open Folder'da güvenilirliği bilinmiyor | Önce BuildState; hiç "sürüyor" görülmezse Build bölmesinin sonundaki "All succeeded/failed" satırı; o da yoksa 15 sn sessizlik |
+| Build çıktısı | Output → Build bölmesinin GUID'i `{1BD8A850-02D1-11D1-BEE7-00A0C913D1F8}` (dil bağımsız) | Bölme GUID ile, yoksa adıyla ("Build", "Derleme") bulunur; MSVC/Ninja satırları ayrıştırılır |
+| Hangi VS penceresi bu klasörü açmış? | `Solution.FullName` Open Folder'da klasörü vermeyebilir | Sırasıyla: FullName eşleşmesi → Kamil'in açtığı örneğin PID'i → pencere başlığı "Klasör - Microsoft Visual Studio" |
+| Duraklatılmış sürece bağlanma | `DebugActiveProcess` duraklatılmış sürece bağlanabilir; ilk iş parçacığı devam edince durulur | `CREATE_SUSPENDED` → `Process2.Attach2("Native")` (olmazsa `Attach`) → `ResumeThread`; bağlanamazsa program yine de devam ettirilir ve uyarılır |
+| Meşgul VS (RPC_E_CALL_REJECTED) | COM çağrıları reddedilebilir | Köprü iş parçacığında `IMessageFilter` ile 60 sn'ye kadar otomatik yeniden deneme |
+| VS'te aktif preset | Saklandığı yer belgelenmemiş | Build klasörleri arasında en son configure edilen (File API yanıtı / CMakeCache zamanı) aktif kabul edilir |
+
+Tanı komutu **Kamil: VS bağlantısını test et**, `vs-probe.ps1`'in yaptığını Kamil içinden yapar ve raporu açar.
+
 ### 7.4 Debug akışı
 
 **Varsayılan: "VS'te derle + başlat + bağlan"**
@@ -752,7 +769,7 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 | Faz | Kapsam | Çıktı |
 |---|---|---|
 | **0 – İskelet** | Tray, `Alt+Space`, D2D pencere (Win10 düz + yuvarlak köşe, Win11 Acrylic), uygulama sağlayıcı, bulanık eşleştirme, başlatma, **ayar altyapısının çekirdeği** (şema, YAML okuma/doğrulama, canlı yeniden yükleme) | Kullanılabilir mini başlatıcı |
-| **1 – Git + Build / Debug (öncelik)** | ✓ git depo keşfi, dal/durum, depo eylemleri, eylem paneli, `Tab` tamamlama, alt bilgi çubuğu · `vs-probe` doğrulaması, vswhere + varsayılan VS, DTE köprüsü (örnek bulma, build/configure tetikleme, bitiş izleme, Output'tan hata listesi), CMakePresets + File API, proje keşfi, plan modeli + son plan hafızası, Konsol penceresi (çalıştırma sekmeleri), preset başına çalıştırma, Debug (VS'te derle + başlat + bağlan, IDE içi F5, DebugExe), COM port servisi + çoklu örnekte port atama | Günlük build/debug kullanımı |
+| **1 – Git + Build / Debug (öncelik)** | ✓ git depo keşfi, dal/durum, depo eylemleri, eylem paneli, `Tab` tamamlama, alt bilgi çubuğu · ✓ preset/hedef/COM/argüman seçimi, VS Build/Rebuild/Configure (DTE), debug (başlat+bağlan), çalıştır, iş durumu alt bilgide · kalan: Konsol penceresi, IDE içi F5 modu · vswhere + varsayılan VS, DTE köprüsü (örnek bulma, build/configure tetikleme, bitiş izleme, Output'tan hata listesi), CMakePresets + File API, proje keşfi, plan modeli + son plan hafızası, Konsol penceresi (çalıştırma sekmeleri), preset başına çalıştırma, Debug (VS'te derle + başlat + bağlan, IDE içi F5, DebugExe), COM port servisi + çoklu örnekte port atama | Günlük build/debug kullanımı |
 | **2 – Ayarlar & Özel komutlar** | Ayarlar penceresi (şemadan üretilen form, arama, katman gösterimi, yorum koruyarak yazma, yedek), özel komutlar + parametre soruları + zincirler, script klasörleri, global öğe kısayolları, hariç tutma düzenleyici | Kodsuz yapılandırma |
 | **3 – Arama genişlemesi** | Dosya indeksi + mmap önbellek + watcher, ikon önbelleği, sık kullanılanlar/LAN/şablonlu bağlantılar, Everything (opsiyonel), tam eylem paneli | Alfred eşdeğeri arama |
 | **4 – Akıllanma & araçlar** | Öğrenme/tahmin, kill/lock/port/err/hesap, KamilIndexer (MFT/USN), Alfred eklentileri, tema dosyaları | Tam sürüm |

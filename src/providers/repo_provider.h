@@ -19,6 +19,8 @@ struct RepoInfo {
     std::wstring path;
     std::wstring name;
     std::string branch;  // from HEAD, no git.exe needed
+    bool git = false;
+    bool cmake = false;  // has CMakeLists.txt (a buildable project)
 };
 
 struct RepoState {

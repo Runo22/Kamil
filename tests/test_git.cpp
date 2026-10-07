@@ -79,5 +79,14 @@ TEST(git_find_repos_and_worktree) {
     auto git_dir = resolve_git_dir(root / "wt");
     CHECK(git_dir.has_value());
     CHECK_EQ(read_head(*git_dir).branch, std::string("hotfix"));
+    // CMake roots without git are found when asked for; their subdirectories are not.
+    fs::create_directories(root / "plain" / "src");
+    std::ofstream(root / "plain" / "CMakeLists.txt") << "project(plain)\n";
+    std::ofstream(root / "plain" / "src" / "CMakeLists.txt") << "add_executable(x x.cpp)\n";
+    CHECK(!has(root / "plain"));
+    opt.include_cmake_roots = true;
+    repos = find_repos({root}, opt);
+    CHECK(has(root / "plain"));
+    CHECK(!has(root / "plain" / "src"));
     fs::remove_all(root);
 }

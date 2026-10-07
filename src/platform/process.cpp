@@ -27,6 +27,26 @@ std::wstring quote_arg(const std::wstring& arg) {
     return out;
 }
 
+std::optional<LaunchedProcess> launch_process(const std::wstring& exe, const std::wstring& args, const std::wstring& working_dir,
+                                              const std::wstring& console_title, bool suspended, std::wstring* error) {
+    std::wstring cmd = quote_arg(exe);
+    if (!args.empty()) cmd += L" " + args;
+    std::vector<wchar_t> buf(cmd.begin(), cmd.end());
+    buf.push_back(L'\0');
+    std::wstring title = console_title;
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    si.lpTitle = title.empty() ? nullptr : title.data();
+    PROCESS_INFORMATION pi{};
+    const DWORD flags = CREATE_NEW_CONSOLE | CREATE_UNICODE_ENVIRONMENT | (suspended ? CREATE_SUSPENDED : 0);
+    if (!CreateProcessW(exe.c_str(), buf.data(), nullptr, nullptr, FALSE, flags, nullptr,
+                        working_dir.empty() ? nullptr : working_dir.c_str(), &si, &pi)) {
+        if (error) *error = win32_error_message(GetLastError());
+        return std::nullopt;
+    }
+    return LaunchedProcess{pi.hProcess, pi.hThread, pi.dwProcessId};
+}
+
 std::optional<ProcessResult> run_capture(const std::wstring& command_line, const std::wstring& working_dir,
                                          uint32_t timeout_ms, bool merge_stderr) {
     SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};

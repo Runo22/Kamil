@@ -129,7 +129,7 @@ std::vector<fs::path> find_repos(const std::vector<fs::path>& roots, const RepoS
             Pending cur = std::move(stack.back());
             stack.pop_back();
             std::error_code ec;
-            if (fs::exists(cur.dir / ".git", ec)) {
+            if (fs::exists(cur.dir / ".git", ec) || (opt.include_cmake_roots && fs::exists(cur.dir / "CMakeLists.txt", ec))) {
                 repos.push_back(cur.dir);
                 continue;
             }

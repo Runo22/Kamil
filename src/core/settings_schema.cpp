@@ -126,6 +126,14 @@ Schema build() {
                  "'Terminalde aç' eyleminin kullanacağı program (wt yoksa cmd)"));
     s.add(def(keys::kGitStatus, Kind::Bool, true, "Git durumunu göster",
               "Seçili deponun değişiklik sayısı ve ahead/behind bilgisi (git.exe çalıştırılır)"));
+    s.add(def(keys::kBuildBeforeDebug, Kind::Bool, true, "Debug öncesi derle",
+              "Debug komutu önce VS'te Build All çalıştırır, başarılıysa programı başlatıp debugger'ı bağlar"));
+    s.add(def(keys::kDefaultArgs, Kind::String, "", "Varsayılan program argümanları",
+              "Projede argüman girilmemişse kullanılır. {com}, {preset}, {target}, {config}, {project} yer tutucuları. Örnek: --port {com} --baud 115200"));
+    s.add(def(keys::kVsConfigureCommand, Kind::String, "", "VS configure komutu",
+              "Boş: VS komut tablosundan otomatik bulunur. Bulunamazsa 'Kamil: VS bağlantısını test et' raporundaki adı yazın"));
+    s.add(def(keys::kVsReconfigureCommand, Kind::String, "", "VS önbelleği sil + yeniden yapılandır komutu",
+              "Boş: otomatik bulunur (adında DeleteCache geçen komut)"));
     return s;
 }
 

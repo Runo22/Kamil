@@ -252,7 +252,7 @@ void LauncherWindow::show() {
     if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dx, &dy))) dx = 96;
     update_dpi(static_cast<float>(dx));
 
-    if (mode_ == Mode::Actions) {  // never reopen inside the action panel
+    if (mode_ != Mode::Results) {  // never reopen inside the action panel
         mode_ = Mode::Results;
         action_items_.clear();
         hits_.clear();
@@ -309,7 +309,7 @@ void LauncherWindow::restart_caret() {
 // Results
 
 void LauncherWindow::set_results(std::vector<Hit> hits) {
-    if (mode_ == Mode::Actions) return;  // refreshed when the action panel closes
+    if (mode_ != Mode::Results) return;  // refreshed when the action panel closes
     hits_ = std::move(hits);
     selected_ = 0;
     scroll_ = 0;
@@ -348,6 +348,12 @@ LaunchMode LauncherWindow::mode_from_keyboard() const {
 void LauncherWindow::activate(size_t index, LaunchMode mode) {
     if (index >= hits_.size()) return;
     const Item item = *hits_[index].item;  // the callback may rebuild the item list
+    if (mode_ == Mode::Input) {
+        auto done = input_done_;
+        const std::wstring text = edit_.text();
+        if (done) done(text);
+        return;
+    }
     if (mode_ == Mode::Actions) {
         const Item parent = action_parent_;
         if (cb_.run_action) cb_.run_action(parent, item);
@@ -363,6 +369,8 @@ void LauncherWindow::text_changed() {
     restart_caret();
     if (mode_ == Mode::Actions) {
         filter_actions();
+    } else if (mode_ == Mode::Input) {
+        layout();
     } else if (cb_.query_changed) {
         cb_.query_changed(edit_.text());  // calls set_results()
     }
@@ -373,15 +381,23 @@ void LauncherWindow::text_changed() {
 // Action panel and completion
 
 void LauncherWindow::open_actions() {
-    if (mode_ == Mode::Actions || selected_ >= hits_.size() || !cb_.actions_for) return;
-    Item parent = *hits_[selected_].item;
+    if (mode_ != Mode::Results || selected_ >= hits_.size() || !cb_.actions_for) return;
+    const Item parent = *hits_[selected_].item;
     std::vector<Item> actions = cb_.actions_for(parent);
     if (actions.empty()) return;
-    for (auto& a : actions) a.prepare();
-    saved_query_ = edit_.text();
-    saved_selected_ = selected_;
-    action_parent_ = std::move(parent);
-    action_items_ = std::move(actions);
+    show_list(parent, std::move(actions), L"Eylem ara — " + parent.title);
+}
+
+void LauncherWindow::show_list(const Item& parent, std::vector<Item> items, std::wstring placeholder) {
+    for (auto& a : items) a.prepare();
+    if (mode_ == Mode::Results) {
+        saved_query_ = edit_.text();
+        saved_selected_ = selected_;
+    }
+    action_parent_ = parent;
+    action_items_ = std::move(items);
+    placeholder_ = std::move(placeholder);
+    input_done_ = nullptr;
     mode_ = Mode::Actions;
     edit_.clear();
     input_scroll_ = 0;
@@ -390,8 +406,46 @@ void LauncherWindow::open_actions() {
     render();
 }
 
+void LauncherWindow::reopen_actions(const Item& parent) {
+    if (!cb_.actions_for) return;
+    std::vector<Item> actions = cb_.actions_for(parent);
+    if (actions.empty()) return;
+    show_list(parent, std::move(actions), L"Eylem ara — " + parent.title);
+}
+
+void LauncherWindow::prompt(const Item& parent, std::wstring placeholder, std::wstring initial, std::wstring help,
+                            std::function<void(const std::wstring&)> done) {
+    if (mode_ == Mode::Results) {
+        saved_query_ = edit_.text();
+        saved_selected_ = selected_;
+    }
+    action_parent_ = parent;
+    Item hint;
+    hint.kind = ItemKind::Action;
+    hint.key = L"action:prompt";
+    hint.target = L"prompt";
+    hint.title = L"Enter ile kaydet";
+    hint.subtitle = std::move(help);
+    hint.glyph = 0x270E;  // ✎
+    hint.prepare();
+    action_items_ = {std::move(hint)};
+    hits_ = {Hit{&action_items_.front(), 0, {}}};
+    placeholder_ = std::move(placeholder);
+    input_done_ = std::move(done);
+    mode_ = Mode::Input;
+    edit_.set_text(std::move(initial));
+    input_scroll_ = 0;
+    selected_ = 0;
+    scroll_ = 0;
+    layout();
+    if (visible()) place_window();
+    restart_caret();
+    render();
+}
+
 void LauncherWindow::close_actions() {
-    if (mode_ != Mode::Actions) return;
+    if (mode_ == Mode::Results) return;
+    input_done_ = nullptr;
     mode_ = Mode::Results;
     hits_.clear();
     action_items_.clear();
@@ -425,7 +479,7 @@ void LauncherWindow::filter_actions() {
 }
 
 void LauncherWindow::complete() {
-    if (selected_ >= hits_.size()) return;
+    if (mode_ == Mode::Input || selected_ >= hits_.size()) return;
     const Item& item = *hits_[selected_].item;
     std::wstring text = item.completion.empty() ? item.title : item.completion;
     if (text == edit_.text()) return;
@@ -455,15 +509,19 @@ bool LauncherWindow::on_key(WPARAM vk, bool alt) {
             hide();
             return true;
         }
+        if (mode_ == Mode::Results && vk >= 'A' && vk <= 'Z' && selected_ < hits_.size() && cb_.quick_action) {
+            const Item item = *hits_[selected_].item;
+            if (cb_.quick_action(item, static_cast<wchar_t>(vk))) return true;
+        }
         return false;
     }
 
     switch (vk) {
         case VK_TAB:
-            if (mode_ == Mode::Results) complete();
+            complete();
             return true;
         case VK_ESCAPE:
-            if (mode_ == Mode::Actions) {
+            if (mode_ != Mode::Results) {
                 close_actions();
             } else if (edit_.has_selection() && style_.remember_query) {
                 edit_.end(false);
@@ -488,7 +546,7 @@ bool LauncherWindow::on_key(WPARAM vk, bool alt) {
             move_selection(static_cast<int>(std::max<size_t>(1, visible_rows_)));
             return true;
         case VK_LEFT:
-            if (mode_ == Mode::Actions && edit_.text().empty()) {
+            if (mode_ == Mode::Actions && edit_.text().empty()) {  // ← on an empty filter goes back
                 close_actions();
                 return true;
             }
@@ -738,7 +796,7 @@ void LauncherWindow::render() {
     if (fmt_input_ && dw) {
         const std::wstring& text = edit_.text();
         const bool placeholder = text.empty();
-        const std::wstring hint = mode_ == Mode::Actions ? L"Eylem ara — " + action_parent_.title : L"Uygulama, depo veya komut ara…";
+        const std::wstring hint = mode_ != Mode::Results ? placeholder_ : L"Uygulama, depo veya komut ara…";
         const std::wstring shown = placeholder ? hint : text;
         ComPtr<IDWriteTextLayout> tl;
         dw->CreateTextLayout(shown.c_str(), static_cast<UINT32>(shown.size()), fmt_input_.Get(), 10000.f, input_h_, &tl);
@@ -906,7 +964,8 @@ void LauncherWindow::refresh_footer() {
 void LauncherWindow::draw_footer(ID2D1DeviceContext* dc) {
     if (cb_.footer) {
         const Item* sel = selected_ < hits_.size() ? hits_[selected_].item : nullptr;
-        footer_ = cb_.footer(sel, mode_ == Mode::Actions ? &action_parent_ : nullptr);
+        footer_ = cb_.footer(sel, mode_ != Mode::Results ? &action_parent_ : nullptr);
+        if (mode_ == Mode::Input) footer_.right = L"Enter kaydet · Esc iptal";
     }
     IDWriteFactory* dw = renderer_.dwrite();
     if (!dw || !fmt_footer_) return;

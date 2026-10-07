@@ -4,11 +4,13 @@
 #include <shellapi.h>
 #include <windowsx.h>
 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <sstream>
 
 #include "../res/resource.h"
+#include "app/action_item.h"
 #include "core/hotkey.h"
 #include "core/settings_schema.h"
 #include "core/text.h"
@@ -50,6 +52,7 @@ constexpr BuiltinCommand kCommands[] = {
     {L"reload", L"Kamil: Ayarları yeniden yükle", L"settings.yaml dosyasını yeniden okur"},
     {L"rescan", L"Kamil: Uygulamaları ve depoları yeniden tara", L"Başlat Menüsü, Store uygulamaları ve proje köklerindeki git depoları"},
     {L"forget", L"Kamil: Öğrenilenleri sıfırla", L"Sık kullanılanlar ve arama tercihleri silinir"},
+    {L"vs-diagnose", L"Kamil: VS bağlantısını test et", L"Açık VS 2022/2026 örnekleri, Output bölmeleri ve CMake komut adları raporu"},
     {L"quit", L"Kamil: Çıkış", L"Kamil'i kapatır (kısayol devre dışı kalır)"},
 };
 
@@ -71,27 +74,6 @@ bool write_if_changed(const std::filesystem::path& path, const std::string& cont
 }
 
 std::wstring hotkey_display(const std::string& text) { return widen(text); }
-
-// Segoe MDL2 Assets glyphs for actions that have no program icon.
-constexpr wchar_t kGlyphCopy = 0xE8C8;
-constexpr wchar_t kGlyphFolder = 0xE8B7;
-constexpr wchar_t kGlyphAdmin = 0xE7EF;
-constexpr wchar_t kGlyphTerminal = 0xE756;
-constexpr wchar_t kGlyphPlay = 0xE768;
-constexpr wchar_t kGlyphBranch = 0x2387;  // ⎇ (font fallback draws it from Segoe UI Symbol)
-
-Item make_action(std::wstring id, std::wstring title, std::wstring icon_source, wchar_t glyph, std::wstring subtitle = {}) {
-    Item a;
-    a.kind = ItemKind::Action;
-    a.target = std::move(id);
-    // Actions with the same program share one icon cache entry.
-    a.key = L"action:" + (icon_source.empty() ? a.target : icon_source);
-    a.title = std::move(title);
-    a.subtitle = std::move(subtitle);
-    a.icon_source = std::move(icon_source);
-    a.glyph = glyph;
-    return a;
-}
 
 std::wstring vs_title(const std::string& which) { return which == "vs2022" ? L"Visual Studio 2022" : L"Visual Studio 2026"; }
 
@@ -119,6 +101,8 @@ int App::run(HINSTANCE instance, bool autostart) {
     executor_ = std::make_unique<Executor>();
     icon_loader_ = std::make_unique<IconLoader>(hwnd_);
     git_ = std::make_unique<GitService>(hwnd_);
+    vs_ = std::make_unique<VsBridge>(hwnd_);
+    project_state_.load(paths_.projects_file());
     {
         const HWND target = hwnd_;
         executor_->post([target] { post_owned(target, WM_KAMIL_TOOLS_READY, new Tools(discover_tools())); });
@@ -138,6 +122,7 @@ int App::run(HINSTANCE instance, bool autostart) {
     cb.actions_for = [this](const Item& item) { return actions_for(item); };
     cb.run_action = [this](const Item& parent, const Item& action) { run_action(parent, action.target); };
     cb.footer = [this](const Item* selected, const Item* parent) { return footer_for(selected, parent); };
+    cb.quick_action = [this](const Item& item, wchar_t key) { return quick_action(item, key); };
     if (!launcher_.create(instance_, std::move(cb))) {
         MessageBoxW(nullptr, L"Arama penceresi oluşturulamadı (Direct2D/DirectComposition).", L"Kamil", MB_ICONERROR);
         return 1;
@@ -166,6 +151,7 @@ int App::run(HINSTANCE instance, bool autostart) {
     UnregisterHotKey(hwnd_, kHotkeyId);
     watcher_.stop();
     tray_.destroy();
+    vs_.reset();
     git_.reset();
     icon_loader_.reset();
     executor_.reset();
@@ -336,7 +322,7 @@ void App::rebuild_items() {
         it.kind = ItemKind::Repo;
         it.key = L"repo:" + repo.path;
         it.title = repo.name;
-        it.subtitle = repo.branch.empty() ? repo.path : L"⎇ " + widen(repo.branch) + L"   " + repo.path;
+        it.subtitle = (repo.branch.empty() ? std::wstring() : L"⎇ " + widen(repo.branch) + L"   ") + (repo.cmake ? L"CMake   " : L"") + repo.path;
         it.target = repo.path;
         it.path = repo.path;
         it.icon_source = repo.path;  // the folder's own shell icon
@@ -410,6 +396,12 @@ void App::run_command(const std::wstring& id) {
             usage_.clear();
             usage_.save(paths_.usage_file());
         }
+    } else if (id == L"vs-diagnose") {
+        VsJob job;
+        job.kind = VsJob::Kind::Diagnose;
+        job.report_file = paths_.vs_report_file();
+        vs_->submit(std::move(job));
+        notify(L"VS bağlantısı test ediliyor", L"Rapor birkaç saniye içinde açılacak.", Tray::Balloon::Info);
     } else if (id == L"quit") {
         DestroyWindow(hwnd_);
     }
@@ -430,6 +422,7 @@ void App::scan_repos() {
     }
     RepoScanOptions opt;
     opt.max_depth = static_cast<size_t>(s->get_int(keys::kScanDepth));
+    opt.include_cmake_roots = true;
     for (const auto& g : s->get_list(keys::kScanExclude)) opt.exclude.push_back(fold(widen(g)));
     if (roots.empty()) {
         if (!repos_.empty()) {
@@ -454,6 +447,8 @@ std::vector<Item> App::actions_for(const Item& item) const {
     const std::string vs = store_.current()->get_string(keys::kDefaultVs);
     switch (item.kind) {
         case ItemKind::Repo: {
+            if (is_project(item.path))
+                for (auto& a : const_cast<App*>(this)->project_actions(item)) actions.push_back(std::move(a));
             const std::wstring& devenv = tools_.devenv(vs);
             const std::wstring other_vs = vs == "vs2022" ? tools_.devenv_2026 : tools_.devenv_2022;
             std::vector<Item> list;
@@ -512,6 +507,7 @@ void App::run_action(const Item& parent, const std::wstring& action) {
         run_command(parent.target);
         return;
     }
+    if (parent.kind == ItemKind::Repo && run_project_action(parent, action)) return;
     if (action == L"copy-path") {
         copy_to_clipboard(hwnd_, parent.path.empty() ? parent.target : parent.path);
         launcher_.hide();
@@ -586,6 +582,8 @@ void App::run_action(const Item& parent, const std::wstring& action) {
 }
 
 std::wstring App::repo_context(const std::wstring& path) {
+    const bool git = std::any_of(repos_.begin(), repos_.end(), [&](const RepoInfo& r) { return r.path == path && r.git; });
+    if (!git) return {};
     auto it = repo_states_.find(path);
     const bool fresh = it != repo_states_.end() && GetTickCount64() - it->second.tick < 5000;
     if (!fresh && git_) git_->request(path);
@@ -607,30 +605,46 @@ std::wstring App::repo_context(const std::wstring& path) {
 
 Footer App::footer_for(const Item* selected, const Item* parent) {
     Footer f;
+    // A running (or just finished) VS job is always shown first: "⚒ Build sürüyor… 0:12".
+    const std::wstring job = job_status();
+    auto with_job = [&](std::wstring context) {
+        if (job.empty()) return context;
+        return context.empty() ? job : job + L"     " + context;
+    };
+    auto repo_line = [&](const Item& repo) {
+        std::wstring line = repo_context(repo.path);
+        if (is_project(repo.path)) {
+            const std::wstring project = project_context(repo.path);
+            if (!project.empty()) line += (line.empty() ? L"" : L"   ") + project;
+        }
+        return line;
+    };
     if (parent) {
-        f.left = parent->kind == ItemKind::Repo ? parent->title + L"   " + repo_context(parent->path) : parent->title;
-        f.right = L"Enter çalıştır · Esc geri";
+        f.left = with_job(parent->kind == ItemKind::Repo ? parent->title + L"   " + repo_line(*parent) : parent->title);
+        f.right = L"Enter seç · Tab tamamla · Esc geri";
         return f;
     }
     if (!selected) {
+        f.left = with_job({});
         f.right = L"Esc kapat";
         return f;
     }
     switch (selected->kind) {
         case ItemKind::Repo: {
-            f.left = repo_context(selected->path);
+            f.left = with_job(repo_line(*selected));
             const std::wstring def = default_repo_action();
             const std::wstring what = def == L"code" ? L"VS Code" : def == L"explorer" ? L"Gezgin" : def == L"terminal" ? L"Terminal"
                                                                                                                     : L"Visual Studio";
-            f.right = L"Enter " + what + L" · Ctrl+K eylemler · Tab";
+            f.right = is_project(selected->path) ? L"Alt+D debug · Alt+B build · Alt+R çalıştır · Ctrl+K"
+                                                 : L"Enter " + what + L" · Ctrl+K eylemler · Tab";
             break;
         }
         case ItemKind::Command:
-            f.left = selected->subtitle;
+            f.left = with_job(selected->subtitle);
             f.right = L"Enter çalıştır";
             break;
         default:
-            f.left = selected->path;
+            f.left = with_job(selected->path);
             f.right = L"Enter aç · Ctrl+K eylemler · Tab";
             break;
     }
@@ -742,6 +756,15 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             launcher_.refresh_footer();
             return 0;
         }
+        case WM_KAMIL_VS_EVENT: {
+            std::unique_ptr<VsEvent> e(reinterpret_cast<VsEvent*>(lp));
+            on_vs_event(*e);
+            return 0;
+        }
+        case WM_DEVICECHANGE:
+            com_ports_stale_ = true;  // a serial adapter may have been plugged in or out
+            invalidate_project({});
+            return TRUE;
         case WM_KAMIL_FILE_CHANGED:
             SetTimer(hwnd_, kTimerReloadSettings, 200, nullptr);  // editors write in several steps
             return 0;
@@ -760,6 +783,8 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             } else if (wp == kTimerSaveUsage) {
                 KillTimer(hwnd_, kTimerSaveUsage);
                 usage_.save(paths_.usage_file());
+            } else if (wp == 4) {  // job clock in the footer
+                launcher_.refresh_footer();
             } else if (wp == kTimerRescanApps) {
                 apps_provider_.scan_async(hwnd_);
                 scan_repos();

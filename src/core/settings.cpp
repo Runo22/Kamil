@@ -14,6 +14,7 @@
 #endif
 
 #include "core/hotkey.h"
+#include "core/ryml_support.h"
 #include "core/text.h"
 
 namespace kamil {
@@ -152,21 +153,6 @@ bool parse_duration(std::string_view text, int64_t* ms) {
 
 namespace {
 
-struct YamlError {
-    std::string message;
-    size_t line = 0;
-    size_t col = 0;
-};
-
-[[noreturn]] void ryml_error(const char* msg, size_t len, ryml::Location loc, void*) {
-    throw YamlError{std::string(msg, len), loc.line, loc.col};
-}
-
-void install_ryml_callbacks() {
-    static std::once_flag once;
-    std::call_once(once, [] { ryml::set_callbacks(ryml::Callbacks(nullptr, nullptr, nullptr, ryml_error)); });
-}
-
 std::string to_std(ryml::csubstr s) { return std::string(s.data() ? s.data() : "", s.size()); }
 
 int levenshtein(std::string_view a, std::string_view b) {
@@ -265,7 +251,7 @@ public:
         auto settings = defaults(schema_);
         result.settings = settings;
 
-        install_ryml_callbacks();
+        install_ryml_error_handler();
         if (trim(yaml).empty()) return result;
 
         try {
@@ -290,7 +276,7 @@ public:
             }
             walk_map(root, "", *settings);
             parser_ = nullptr;
-        } catch (const YamlError& e) {
+        } catch (const RymlError& e) {
             Diagnostic d;
             d.severity = Diagnostic::Severity::Error;
             d.file = filename_;

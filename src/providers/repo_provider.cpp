@@ -17,7 +17,12 @@ void RepoProvider::scan_async(std::vector<std::filesystem::path> roots, RepoScan
             RepoInfo info;
             info.path = path.wstring();
             info.name = path.filename().wstring();
-            if (auto git_dir = resolve_git_dir(path)) info.branch = read_head(*git_dir).display();
+            if (auto git_dir = resolve_git_dir(path)) {
+                info.git = true;
+                info.branch = read_head(*git_dir).display();
+            }
+            std::error_code ec;
+            info.cmake = std::filesystem::exists(path / "CMakeLists.txt", ec);
             repos->push_back(std::move(info));
         }
         post_owned(target, WM_KAMIL_REPOS_READY, repos);

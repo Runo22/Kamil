@@ -45,6 +45,8 @@ public:
         std::function<void(const Item& item, const Item& action)> run_action;
         // Footer text for the selected item (nullptr when nothing is selected).
         std::function<Footer(const Item* selected, const Item* action_parent)> footer;
+        // Alt+letter on a result (D = debug, B = build, R = run). Returns true if handled.
+        std::function<bool(const Item& item, wchar_t key)> quick_action;
     };
 
     bool create(HINSTANCE instance, Callbacks callbacks);
@@ -64,7 +66,15 @@ public:
     // GetTickCount64() of the last hide, used to ignore the tray click that caused the hide.
     uint64_t hidden_at() const { return hidden_at_; }
     const std::wstring& query() const { return edit_.text(); }
-    bool in_action_panel() const { return mode_ == Mode::Actions; }
+    bool in_action_panel() const { return mode_ != Mode::Results; }
+
+    // Shows `items` as a pickable list for `parent` (an action panel with custom content).
+    void show_list(const Item& parent, std::vector<Item> items, std::wstring placeholder);
+    // Re-opens the action panel of `parent` (e.g. after a choice was made in a list).
+    void reopen_actions(const Item& parent);
+    // Lets the user edit one line of text; Enter calls `done`, Esc returns to the results.
+    void prompt(const Item& parent, std::wstring placeholder, std::wstring initial, std::wstring help,
+                std::function<void(const std::wstring&)> done);
     void refresh_footer();  // re-query the footer (e.g. git status arrived)
 
 private:
@@ -80,7 +90,7 @@ private:
         bool failed = false;
     };
 
-    enum class Mode { Results, Actions };
+    enum class Mode { Results, Actions, Input };
 
     static LRESULT CALLBACK wndproc(HWND, UINT, WPARAM, LPARAM);
     void open_actions();
@@ -130,6 +140,8 @@ private:
     Mode mode_ = Mode::Results;
     Item action_parent_;               // item whose actions are shown
     std::vector<Item> action_items_;   // owned here; hits_ point into it while in Mode::Actions
+    std::wstring placeholder_;         // search box hint in Actions / Input mode
+    std::function<void(const std::wstring&)> input_done_;
     std::wstring saved_query_;         // search text restored when leaving the action panel
     size_t saved_selected_ = 0;
     Footer footer_;

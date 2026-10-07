@@ -33,10 +33,13 @@ endif()
 # Core: platform independent, unit tested
 
 add_library(kamil_core STATIC
+    src/core/cmake.cpp
     src/core/fuzzy.cpp
     src/core/git.cpp
     src/core/hotkey.cpp
     src/core/line_edit.cpp
+    src/core/project_state.cpp
+    src/core/ryml_support.cpp
     src/core/search.cpp
     src/core/settings.cpp
     src/core/settings_schema.cpp
@@ -55,7 +58,9 @@ if(WIN32)
     add_executable(Kamil WIN32
         src/app/main.cpp
         src/app/app.cpp
+        src/app/app_projects.cpp
         src/app/paths.cpp
+        src/platform/com_ports.cpp
         src/platform/file_watcher.cpp
         src/platform/icon_loader.cpp
         src/platform/process.cpp
@@ -63,6 +68,7 @@ if(WIN32)
         src/platform/system_theme.cpp
         src/platform/tools.cpp
         src/platform/tray.cpp
+        src/platform/vs_bridge.cpp
         src/providers/apps_provider.cpp
         src/providers/repo_provider.cpp
         src/ui/launcher_window.cpp
@@ -71,7 +77,7 @@ if(WIN32)
     )
     target_link_libraries(Kamil PRIVATE kamil_core
         d2d1 dwrite d3d11 dxgi dcomp dwmapi windowscodecs
-        shell32 shcore shlwapi ole32 oleaut32 uuid propsys comctl32 user32 gdi32 advapi32)
+        setupapi shell32 shcore shlwapi ole32 oleaut32 uuid propsys comctl32 user32 gdi32 advapi32)
     target_compile_definitions(Kamil PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN
         _WIN32_WINNT=0x0A00 WINVER=0x0A00 KAMIL_VERSION="${PROJECT_VERSION}")
     target_compile_options(Kamil PRIVATE ${KAMIL_WARNINGS})
@@ -88,7 +94,7 @@ endif()
 
 if(KAMIL_BUILD_TESTS)
     enable_testing()
-    add_executable(kamil_tests tests/test_main.cpp tests/test_core.cpp tests/test_git.cpp tests/test_settings.cpp)
+    add_executable(kamil_tests tests/test_main.cpp tests/test_cmake.cpp tests/test_core.cpp tests/test_git.cpp tests/test_settings.cpp)
     target_link_libraries(kamil_tests PRIVATE kamil_core)
     target_compile_options(kamil_tests PRIVATE ${KAMIL_WARNINGS})
     if(MINGW)

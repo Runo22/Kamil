@@ -5,7 +5,7 @@ yazdıkça Türkçe karakterleri tanıyan bulanık arama yapar ve seçimlerinden
 
 Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 
-## Durum: Faz 0 + git entegrasyonu
+## Durum: Faz 0 + git + Faz 1 (build / debug / çalıştır)
 
 | Özellik | Durum |
 |---|---|
@@ -20,7 +20,12 @@ Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 | Git: proje köklerindeki depolar, dal (anında) + değişiklik / ahead-behind (arka planda) | ✓ |
 | Eylem paneli (`Ctrl+K`): VS 2026/2022 (Open Folder), VS Code, Gezgin, terminal, Git Bash, Git GUI — kendi ikonlarıyla | ✓ |
 | `Tab` tamamlama, alt bilgi çubuğu (dal, değişiklikler, tuş ipuçları) | ✓ |
-| Preset/plan seçimi, VS'te build/debug, COM port | Faz 1 (sıradaki) |
+| CMake projeleri: preset'ler (`CMakePresets.json`), hedefler (CMake File API), seçimler proje başına hatırlanır | ✓ |
+| VS 2026/2022'de Build / Rebuild / Configure — COM (DTE) ile, bitişi izlenir, hata/uyarı sayısı tray'de | ✓ |
+| Debug: VS'te derle → programı duraklatılmış başlat → VS debugger'ı bağla → devam | ✓ |
+| Çalıştır (ayrı konsol penceresinde), diğer preset'lerin build'lerini ayrı ayrı çalıştırma | ✓ |
+| COM port seçimi (dostu ad, VID/PID ile hatırlama), argüman şablonu `--port {com}` | ✓ |
+| Konsol penceresi (çıktıları Kamil içinde sekmeli gösterme) | sıradaki |
 | Ayarlar penceresi, özel komutlar, dosya indeksi | Faz 2–3 |
 | Windows 11 Acrylic arka plan | sonraki adım (şu an iki sistemde de düz yüzey) |
 
@@ -48,6 +53,7 @@ Tek bir `Kamil.exe` üretilir (statik CRT, ek DLL gerekmez). VS2022 ile de derle
 | `↑ ↓`, `Ctrl+J`, `PgUp/PgDn`, fare tekerleği | Sonuçlarda gezin |
 | `Tab` | Seçili öğenin adını arama kutusuna yaz (tamamla) |
 | `Ctrl+K` veya metnin sonunda `→` | Eylem paneli; `Esc`/`←` geri |
+| `Alt+D` / `Alt+B` / `Alt+R` (CMake projesi seçiliyken) | Debug / Build / Çalıştır — seçili preset, hedef, port ve argümanlarla |
 | `Enter` | Aç |
 | `Ctrl+Enter` | Dosya konumunu Gezgin'de göster |
 | `Shift+Enter` | Yönetici olarak çalıştır |
@@ -57,6 +63,25 @@ Tek bir `Kamil.exe` üretilir (statik CRT, ek DLL gerekmez). VS2022 ile de derle
 
 Boş pencerede en sık / son kullandıkların listelenir. `Kamil:` ile başlayan dahili komutlar da aranabilir:
 `ayar` → *Kamil: Ayarları düzenle*, `tara` → *Kamil: Uygulamaları yeniden tara*, `çıkış` …
+
+## Projeler: build, debug, çalıştır
+
+`dev.project_roots` altındaki git depoları ve CMake projeleri aramada çıkar. Bir CMake projesi seçiliyken:
+
+- `Alt+D` **Debug**: VS'te Build All → başarılıysa program yeni bir konsolda **duraklatılmış** başlatılır → VS debugger'ı
+  bağlanır → program devam eder (`main`'deki breakpoint'ler de tutar). Argümanlar ve COM port tamamen Kamil'den gelir.
+- `Alt+B` **Build**: VS'e `Build.BuildAll` gönderilir; Kamil bitişi izler, sonucu ("✓ 0 hata, 3 uyarı, 41 sn" veya ilk hata)
+  tray'de ve alt bilgi çubuğunda gösterir. Derlemeyi her zaman VS yapar.
+- `Alt+R` **Çalıştır**: son derlenen exe'yi argümanlarla ayrı bir konsolda başlatır.
+- `Ctrl+K`: preset / hedef / COM port seçimi (`Tab` tamamlar), argüman düzenleme, diğer preset'lerin build'lerini
+  ayrı ayrı çalıştırma, Rebuild, CMake configure, önbelleği silip yeniden yapılandırma.
+
+VS seçili klasörü açmamışsa Kamil `devenv "<klasör>"` ile açar ve CMake hazırlığını bekler. Open Folder modunda
+VS **kendi seçili preset'ini** derler; Kamil'deki preset farklıysa uyarır.
+
+İlk kullanımda bir kez **Kamil: VS bağlantısını test et** komutunu çalıştırın: açık VS örneklerini, Output bölmelerini
+ve VS'teki CMake komutlarının adlarını içeren bir rapor açılır. Configure komutu otomatik bulunamazsa rapordaki adı
+`dev.vs_configure_command` ayarına yazın.
 
 ## Ayarlar
 
@@ -84,6 +109,8 @@ dev:
   project_roots: ['D:\src', 'D:\work']   # git depoları burada aranır
   repo_action: vs                         # depoda Enter: vs | code | explorer | terminal
   terminal: wt                            # wt | cmd | powershell | git-bash
+  default_args: '--port {com} --baud 115200'
+  build_before_debug: true
   aliases:
     - alias: code
       target: Visual Studio Code

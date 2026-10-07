@@ -37,6 +37,10 @@ inline constexpr const char* kScanExclude = "dev.scan_exclude";
 inline constexpr const char* kRepoAction = "dev.repo_action";
 inline constexpr const char* kTerminal = "dev.terminal";
 inline constexpr const char* kGitStatus = "dev.git_status";
+inline constexpr const char* kBuildBeforeDebug = "dev.build_before_debug";
+inline constexpr const char* kDefaultArgs = "dev.default_args";
+inline constexpr const char* kVsConfigureCommand = "dev.vs_configure_command";
+inline constexpr const char* kVsReconfigureCommand = "dev.vs_reconfigure_command";
 }  // namespace keys
 
 }  // namespace kamil

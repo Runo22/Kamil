@@ -45,9 +45,10 @@ struct RepoScanOptions {
     size_t max_depth = 4;
     std::vector<std::wstring> exclude;  // folded glob patterns matched against directory names
     size_t max_repos = 2000;
+    bool include_cmake_roots = false;  // also stop at (and return) folders with a CMakeLists.txt
 };
 
-// Finds git work trees below the roots. Does not descend into a found repository (nested
+// Finds git work trees (and optionally CMake project roots) below the roots. Does not descend into a found repository (nested
 // repositories and submodules are not listed separately).
 std::vector<std::filesystem::path> find_repos(const std::vector<std::filesystem::path>& roots, const RepoScanOptions& opt);
 
