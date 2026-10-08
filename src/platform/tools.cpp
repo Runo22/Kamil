@@ -92,7 +92,13 @@ Tools discover_tools() {
     if (!git_root.empty()) {
         t.git_bash = first_existing({git_root + L"\\git-bash.exe"});
         t.git_gui = first_existing({git_root + L"\\cmd\\git-gui.exe"});
+        t.bash = first_existing({git_root + L"\\bin\\bash.exe", git_root + L"\\usr\\bin\\bash.exe"});
     }
+    t.py = search_path(L"py.exe");
+    t.pyw = search_path(L"pyw.exe");
+    t.python = search_path(L"python.exe");
+    if (t.python.find(L"WindowsApps") != std::wstring::npos) t.python.clear();  // Store installer stub, not Python
+    t.pythonw = search_path(L"pythonw.exe");
     return t;
 }
 

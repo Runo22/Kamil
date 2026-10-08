@@ -14,6 +14,8 @@ Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 | Uygulamalar: Başlat Menüsü + Store/UWP (`shell:AppsFolder`), disk önbelleği ile anında hazır, kendi ikonlarıyla | ✓ |
 | Bulanık arama: `code` → Visual Studio Code (varsayılan takma ad), kelime başı / CamelCase / baş harfler (`ws` → Windows Security), Türkçe katlama (`calisma` → Çalışma) | ✓ |
 | Klasör önceliği: seçtiğin klasörlerin altındaki sonuçlar öne (veya eksi değerle arkaya) | ✓ |
+| Dosya ve klasör araması: `search.folders` altındaki her şey (kendi indeksi, Everything gerekmez) | ✓ |
+| Script'ler: `.bat .cmd .ps1 .py .pyw .sh .exe` — `Enter` çalıştır, `Alt+E` düzenle (VS Code / Not Defteri) | ✓ |
 | Öğrenme: sık/son kullanılan + "bu yazışta bunu seçtin" (yerel, `usage.tsv`) | ✓ |
 | YAML ayarlar: şema tabanlı, doğrulama, satır numaralı hata bildirimi, kaydedince canlı yeniden yükleme, JSON Schema | ✓ |
 | Takma adlar, gizlenecek uygulama desenleri, Windows ile başlat | ✓ |
@@ -63,6 +65,35 @@ Tek bir `Kamil.exe` üretilir (statik CRT, ek DLL gerekmez). VS2022 ile de derle
 
 Boş pencerede en sık / son kullandıkların listelenir. `Kamil:` ile başlayan dahili komutlar da aranabilir:
 `ayar` → *Kamil: Ayarları düzenle*, `tara` → *Kamil: Uygulamaları yeniden tara*, `çıkış` …
+
+## Dosyalar ve script'ler
+
+Kamil, `search.folders` ile verdiğin klasörleri arka planda indeksler (Everything gerekmez; varsayılan: Masaüstü ve
+Belgeler). Bu klasörlerdeki dosya ve klasörler aramada çıkar ve `priority` kadar öne alınır:
+
+```yaml
+search:
+  folders:
+    - path: 'D:\tools\scripts'
+      priority: 60
+    - path: 'D:\src'
+      priority: 20
+      depth: 4
+      include: ['*.py', '*.pyw', '*.bat', '*.ps1', '*.sh']   # boş: tüm dosyalar
+```
+
+| Dosya | Enter | Alt+E | Ctrl+K |
+|---|---|---|---|
+| `.bat` `.cmd` | `cmd /K` ile çalıştırır | düzenle | yönetici olarak, konum, terminal, yolu kopyala |
+| `.ps1` | `powershell -ExecutionPolicy Bypass -NoExit -File` | düzenle | 〃 |
+| `.py` / `.pyw` | `py` / `pyw` (veya `scripts.python`) | düzenle | 〃 |
+| `.sh` | Git for Windows `bash.exe` | düzenle | 〃 |
+| diğer dosyalar | varsayılan uygulamayla aç | düzenle | birlikte aç…, konum, yolu kopyala |
+| klasörler | Gezgin | — | VS Code, Visual Studio (Open Folder), terminal |
+
+`scripts.default_action: edit` ile Enter düzenlemeye, `Alt+R` çalıştırmaya döner. `scripts.keep_console_open: false`
+konsolun iş bitince kapanmasını sağlar. Yeni dosyalar, pencereyi açtığında (2 dk'dan eski indekste) veya
+"Kamil: Yeniden tara" ile görünür.
 
 ## Projeler: build, debug, çalıştır
 

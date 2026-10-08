@@ -1,12 +1,15 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
+#include <thread>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "app/paths.h"
 #include "core/cmake.h"
+#include "core/file_index.h"
 #include "core/item.h"
 #include "core/project_state.h"
 #include "core/search.h"
@@ -49,6 +52,9 @@ struct ProjectView {
     std::wstring target_name() const;
 };
 
+// Expands %VARIABLES% in a path.
+std::wstring expand_env(const std::wstring& raw);
+
 class App {
 public:
     App();
@@ -78,6 +84,19 @@ private:
     std::wstring repo_context(const std::wstring& path);
     void scan_repos();
     std::wstring default_repo_action() const;
+
+    // Files and scripts (app_files.cpp)
+    void scan_files();
+    void on_files_ready(std::unique_ptr<FileIndex> index);
+    Item make_file_item(const std::wstring& path, bool is_dir) const;
+    void add_file_hits(const std::wstring& query, std::vector<Hit>& hits);
+    void run_detached(std::wstring exe, std::wstring args, std::wstring dir, bool admin, std::wstring title, const wchar_t* verb = nullptr);
+    std::wstring python_for(bool windowed) const;
+    void run_script(const Item& item, bool admin);
+    void edit_file(const Item& item);
+    void open_file(const Item& item, LaunchMode mode);
+    std::vector<Item> file_actions(const Item& item) const;
+    bool run_file_action(const Item& item, const std::wstring& action);
 
     // Projects (app_projects.cpp)
     const ProjectView& project_view(const std::wstring& root, bool fresh = false);
@@ -134,6 +153,11 @@ private:
     Tools tools_;
     bool tools_ready_ = false;
     std::vector<Item> items_;  // commands + filtered apps; LauncherWindow keeps pointers into it
+    std::unique_ptr<FileIndex> file_index_;
+    std::vector<Item> query_items_;  // file results of the current query (the launcher points into it)
+    std::thread file_scan_;
+    std::atomic<bool> file_scan_cancel_{false};
+    ULONGLONG files_scanned_at_ = 0;
 
     LauncherWindow launcher_;
     Tray tray_;

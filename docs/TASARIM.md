@@ -1,6 +1,6 @@
 # Kamil — Windows için Offline, Geliştirici Odaklı Başlatıcı
 
-> Durum: **Taslak v0.8** · Uygulama: **Faz 0 + git + Faz 1 build/debug/çalıştır kodlandı** (bkz. README) · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
+> Durum: **Taslak v0.9** · Uygulama: **Faz 0 + git + Faz 1 + dosya/script araması kodlandı** (bkz. README) · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
 
 Alfred'in iş akışını Windows'a, internetsiz bir iş bilgisayarına taşıyan; uygulama/dosya/klasör/LAN
 kaynaklarını anında bulan; script'leri, özel komutları, süreçleri ve CMake projelerinin
@@ -771,7 +771,7 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 | **0 – İskelet** | Tray, `Alt+Space`, D2D pencere (Win10 düz + yuvarlak köşe, Win11 Acrylic), uygulama sağlayıcı, bulanık eşleştirme, başlatma, **ayar altyapısının çekirdeği** (şema, YAML okuma/doğrulama, canlı yeniden yükleme) | Kullanılabilir mini başlatıcı |
 | **1 – Git + Build / Debug (öncelik)** | ✓ git depo keşfi, dal/durum, depo eylemleri, eylem paneli, `Tab` tamamlama, alt bilgi çubuğu · ✓ preset/hedef/COM/argüman seçimi, VS Build/Rebuild/Configure (DTE), debug (başlat+bağlan), çalıştır, iş durumu alt bilgide · kalan: Konsol penceresi, IDE içi F5 modu · vswhere + varsayılan VS, DTE köprüsü (örnek bulma, build/configure tetikleme, bitiş izleme, Output'tan hata listesi), CMakePresets + File API, proje keşfi, plan modeli + son plan hafızası, Konsol penceresi (çalıştırma sekmeleri), preset başına çalıştırma, Debug (VS'te derle + başlat + bağlan, IDE içi F5, DebugExe), COM port servisi + çoklu örnekte port atama | Günlük build/debug kullanımı |
 | **2 – Ayarlar & Özel komutlar** | Ayarlar penceresi (şemadan üretilen form, arama, katman gösterimi, yorum koruyarak yazma, yedek), özel komutlar + parametre soruları + zincirler, script klasörleri, global öğe kısayolları, hariç tutma düzenleyici | Kodsuz yapılandırma |
-| **3 – Arama genişlemesi** | Dosya indeksi + mmap önbellek + watcher, ikon önbelleği, sık kullanılanlar/LAN/şablonlu bağlantılar, Everything (opsiyonel), tam eylem paneli | Alfred eşdeğeri arama |
+| **3 – Arama genişlemesi** (✓ kısmen: `search.folders` için kompakt dosya indeksi, script çalıştır/düzenle, uzantıya göre paylaşılan ikonlar) | Dosya indeksi + mmap önbellek + watcher, ikon önbelleği, sık kullanılanlar/LAN/şablonlu bağlantılar, Everything (opsiyonel), tam eylem paneli | Alfred eşdeğeri arama |
 | **4 – Akıllanma & araçlar** | Öğrenme/tahmin, kill/lock/port/err/hesap, KamilIndexer (MFT/USN), Alfred eklentileri, tema dosyaları | Tam sürüm |
 
 Not: Faz 1 için gereken minimal ayarlar (proje kökleri, varsayılan VS) başlangıçta `settings.yaml`'dan

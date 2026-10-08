@@ -24,6 +24,7 @@ struct Item {
     std::wstring path;        // file system path if known (for "open location", "run as admin")
     std::wstring icon_source; // parsing name whose shell icon is shown; empty: target/path decide
     std::wstring completion;  // text put into the search box by Tab; empty: title
+    std::wstring icon_key;    // icon cache key when icons are shared (e.g. one per file extension); empty: key
     wchar_t glyph = 0;        // Segoe MDL2 Assets glyph drawn when there is no icon source
     ItemKind kind = ItemKind::App;
 
@@ -31,6 +32,8 @@ struct Item {
     std::wstring title_folded;
     std::wstring path_folded;  // for folder priority
     uint64_t mask = 0;
+
+    const std::wstring& icon_cache_key() const { return icon_key.empty() ? key : icon_key; }
 
     void prepare() {
         title_folded = fold(title);

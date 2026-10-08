@@ -27,8 +27,16 @@ inline constexpr const char* kShowFrequent = "search.show_frequent_when_empty";
 inline constexpr const char* kExcludeApps = "search.exclude_apps";
 inline constexpr const char* kAliases = "search.aliases";
 inline constexpr const char* kFolderPriority = "search.folder_priority";
+inline constexpr const char* kSearchFolders = "search.folders";
+inline constexpr const char* kExcludeDirs = "search.exclude_dirs";
+inline constexpr const char* kMaxFiles = "search.max_files";
 inline constexpr const char* kLearning = "search.learning";
 inline constexpr const char* kLearningHalfLife = "search.learning_half_life";
+
+inline constexpr const char* kScriptAction = "scripts.default_action";
+inline constexpr const char* kScriptEditor = "scripts.editor";
+inline constexpr const char* kKeepConsole = "scripts.keep_console_open";
+inline constexpr const char* kPython = "scripts.python";
 
 inline constexpr const char* kDefaultVs = "dev.default_vs";
 inline constexpr const char* kProjectRoots = "dev.project_roots";

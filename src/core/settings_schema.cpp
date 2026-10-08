@@ -79,9 +79,45 @@ Schema build() {
         s.add(std::move(d));
     }
     {
+        auto folder = [](const char* path, int64_t priority, int64_t depth) {
+            Object o;
+            o.fields = {{"path", Value(path)}, {"priority", Value(priority)}, {"depth", Value(depth)}, {"include", Value(Value::List{})}};
+            return o;
+        };
+        auto d = def(keys::kSearchFolders, Kind::ObjectList,
+                     Value::Objects{folder("%USERPROFILE%\\Desktop", 20, 3), folder("%USERPROFILE%\\Documents", 0, 5)},
+                     "Aranacak klasörler",
+                     "Bu klasörlerdeki dosya ve klasörler (script'ler dahil) aramada çıkar ve 'priority' kadar öne alınır. "
+                     "Script'lerde (.bat .cmd .ps1 .py .pyw .sh .exe) Enter çalıştırır, Alt+E düzenler");
+        d.fields.push_back(field("path", Kind::Path, "", "'D:\\tools' (%ORTAM_DEĞİŞKENİ% kullanılabilir)", true));
+        SettingDef prio = field("priority", Kind::Int, 40, "-100..100: öne alma puanı (tipik eşleşme puanı 50-300)");
+        prio.min = -100;
+        prio.max = 100;
+        d.fields.push_back(std::move(prio));
+        SettingDef depth = field("depth", Kind::Int, 6, "1..20: kaç klasör alta inilsin");
+        depth.min = 1;
+        depth.max = 20;
+        d.fields.push_back(std::move(depth));
+        d.fields.push_back(field("include", Kind::GlobList, Value::List{}, "sadece bu desenler, örn. ['*.py', '*.bat']; boş: tüm dosyalar"));
+        d.apply = Apply::Reindex;
+        s.add(std::move(d));
+    }
+    {
+        auto d = def(keys::kExcludeDirs, Kind::GlobList,
+                     Value::List{"node_modules", "__pycache__", "venv", "out", "build", "bin", "obj", "packages", "dist"},
+                     "Aranmayacak klasörler", "Dosya indekslenirken içine girilmeyecek klasör adları (desen); '.' ile başlayanlar zaten atlanır");
+        d.apply = Apply::Reindex;
+        s.add(std::move(d));
+    }
+    {
+        auto d = ranged(keys::kMaxFiles, 300000, 1000, 2000000, "En fazla dosya", "İndeksin üst sınırı (bellek: ~100 bayt/dosya)");
+        d.apply = Apply::Reindex;
+        s.add(std::move(d));
+    }
+    {
         auto d = def(keys::kFolderPriority, Kind::ObjectList, Value::Objects{}, "Klasör önceliği",
-                     "Bu klasörlerin altındaki sonuçlar (depolar, uygulamalar, dosyalar) yukarı taşınır; eksi değer aşağı iter. "
-                     "En uzun eşleşen klasör geçerlidir");
+                     "Bu klasörlerin altındaki sonuçlar yukarı taşınır (eksi değer aşağı iter) ve bu klasörler de dosya aramasına "
+                     "eklenir (derinlik 6). Yeni kurulumlarda search.folders kullanın; en uzun eşleşen klasör geçerlidir");
         d.fields.push_back(field("path", Kind::Path, "", "'D:\\src\\ana-proje' (%ORTAM_DEĞİŞKENİ% kullanılabilir)", true));
         SettingDef prio = field("priority", Kind::Int, 50, "-100..100 (varsayılan 50; tipik eşleşme puanı 50-300)");
         prio.min = -100;
@@ -98,6 +134,16 @@ Schema build() {
         d.max = int64_t{365} * 86'400'000;
         s.add(std::move(d));
     }
+
+    s.set_section_title("scripts", "Script'ler ve dosyalar");
+    s.add(choice(keys::kScriptAction, {"run", "edit"}, "run", "Script'te Enter",
+                 "run: çalıştırır (Alt+E düzenler) · edit: düzenler (Alt+R çalıştırır)"));
+    s.add(choice(keys::kScriptEditor, {"auto", "code", "notepad", "default"}, "auto", "Düzenleyici",
+                 "auto: VS Code varsa o, yoksa Not Defteri · default: dosya türünün 'Düzenle' komutu"));
+    s.add(def(keys::kKeepConsole, Kind::Bool, true, "Konsol açık kalsın",
+              ".bat/.cmd/.ps1/.py/.sh bitince pencere kapanmasın (çıktıyı görmek için)"));
+    s.add(def(keys::kPython, Kind::Path, "", "Python yorumlayıcısı",
+              "Boş: py launcher (py.exe / pyw.exe), yoksa PATH'teki python. Örnek: 'D:\\venvs\\tools\\Scripts\\python.exe'"));
 
     s.set_section_title("dev", "Geliştirme");
     s.add(choice(keys::kDefaultVs, {"vs2026", "vs2022"}, "vs2026", "Varsayılan Visual Studio",

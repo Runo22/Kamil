@@ -96,9 +96,9 @@ std::wstring launch_item(const Item& item, LaunchMode mode) {
     return shell_execute(item.target, nullptr);
 }
 
-std::wstring run_program(const std::wstring& exe, const std::wstring& args, const std::wstring& dir) {
+std::wstring run_program(const std::wstring& exe, const std::wstring& args, const std::wstring& dir, bool admin, const wchar_t* verb) {
     if (exe.empty()) return L"Program bulunamadı.";
-    return shell_execute(exe, nullptr, args, dir);
+    return shell_execute(exe, verb ? verb : admin ? L"runas" : nullptr, args, dir);
 }
 
 std::wstring open_in_editor(const std::filesystem::path& file) {

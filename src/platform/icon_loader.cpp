@@ -6,9 +6,16 @@
 
 #include <algorithm>
 
+#include "core/pixels.h"
+
 namespace kamil {
 
 namespace {
+
+bool copy_pixels(IWICBitmapSource* src, UINT w, UINT h, std::vector<uint32_t>* out) {
+    out->assign(static_cast<size_t>(w) * h, 0);
+    return SUCCEEDED(src->CopyPixels(nullptr, w * 4, static_cast<UINT>(out->size() * 4), reinterpret_cast<BYTE*>(out->data())));
+}
 
 bool extract(IWICImagingFactory* wic, const std::wstring& source, uint32_t size, std::vector<uint32_t>* out) {
     ComPtr<IShellItemImageFactory> factory;
@@ -17,33 +24,36 @@ bool extract(IWICImagingFactory* wic, const std::wstring& source, uint32_t size,
     const SIZE sz{static_cast<LONG>(size), static_cast<LONG>(size)};
     if (FAILED(factory->GetImage(sz, SIIGBF_ICONONLY, &hbmp)) || !hbmp) return false;
 
+    // Read the raw channels without letting WIC reinterpret them; whether the alpha is straight
+    // or premultiplied differs per icon and is decided by normalize_icon_pixels().
     bool ok = false;
+    UINT w = 0, h = 0;
+    std::vector<uint32_t> raw;
     ComPtr<IWICBitmap> bitmap;
-    if (SUCCEEDED(wic->CreateBitmapFromHBITMAP(hbmp, nullptr, WICBitmapUsePremultipliedAlpha, &bitmap))) {
+    if (SUCCEEDED(wic->CreateBitmapFromHBITMAP(hbmp, nullptr, WICBitmapUseAlpha, &bitmap)) && SUCCEEDED(bitmap->GetSize(&w, &h))) {
         ComPtr<IWICFormatConverter> conv;
-        UINT w = 0, h = 0;
-        bitmap->GetSize(&w, &h);
-        ComPtr<IWICBitmapScaler> scaler;
-        IWICBitmapSource* src = bitmap.Get();
-        if ((w != size || h != size) && SUCCEEDED(wic->CreateBitmapScaler(&scaler)) &&
-            SUCCEEDED(scaler->Initialize(bitmap.Get(), size, size, WICBitmapInterpolationModeFant)))
-            src = scaler.Get();
         if (SUCCEEDED(wic->CreateFormatConverter(&conv)) &&
-            SUCCEEDED(conv->Initialize(src, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0,
-                                       WICBitmapPaletteTypeCustom))) {
-            out->assign(static_cast<size_t>(size) * size, 0);
-            ok = SUCCEEDED(conv->CopyPixels(nullptr, size * 4, static_cast<UINT>(out->size() * 4),
-                                            reinterpret_cast<BYTE*>(out->data())));
-        }
+            SUCCEEDED(conv->Initialize(bitmap.Get(), GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0,
+                                       WICBitmapPaletteTypeCustom)))
+            ok = copy_pixels(conv.Get(), w, h, &raw);
     }
     DeleteObject(hbmp);
-    if (!ok) return false;
+    if (!ok || w == 0 || h == 0) return false;
+    normalize_icon_pixels(raw);
 
-    // Some legacy icons carry no alpha channel at all: treat them as opaque.
-    const bool any_alpha = std::any_of(out->begin(), out->end(), [](uint32_t px) { return (px >> 24) != 0; });
-    if (!any_alpha)
-        for (auto& px : *out) px |= 0xFF000000u;
-    return true;
+    if (w == size && h == size) {
+        *out = std::move(raw);
+        return true;
+    }
+    // Scale premultiplied data (scaling straight alpha would bring the halo back).
+    ComPtr<IWICBitmap> pre;
+    ComPtr<IWICBitmapScaler> scaler;
+    if (FAILED(wic->CreateBitmapFromMemory(w, h, GUID_WICPixelFormat32bppPBGRA, w * 4, static_cast<UINT>(raw.size() * 4),
+                                           reinterpret_cast<BYTE*>(raw.data()), &pre)) ||
+        FAILED(wic->CreateBitmapScaler(&scaler)) ||
+        FAILED(scaler->Initialize(pre.Get(), size, size, WICBitmapInterpolationModeFant)))
+        return false;
+    return copy_pixels(scaler.Get(), size, size, out);
 }
 
 }  // namespace

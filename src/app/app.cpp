@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cwctype>
 #include <fstream>
 #include <sstream>
 
@@ -50,7 +51,7 @@ constexpr BuiltinCommand kCommands[] = {
     {L"settings", L"Kamil: Ayarları düzenle", L"settings.yaml dosyasını düzenleyicide açar"},
     {L"config-dir", L"Kamil: Ayar klasörünü aç", L"Ayar, öğrenme ve önbellek dosyalarının bulunduğu klasör"},
     {L"reload", L"Kamil: Ayarları yeniden yükle", L"settings.yaml dosyasını yeniden okur"},
-    {L"rescan", L"Kamil: Uygulamaları ve depoları yeniden tara", L"Başlat Menüsü, Store uygulamaları ve proje köklerindeki git depoları"},
+    {L"rescan", L"Kamil: Yeniden tara", L"Uygulamalar, git depoları ve aranacak klasörlerdeki dosyalar"},
     {L"forget", L"Kamil: Öğrenilenleri sıfırla", L"Sık kullanılanlar ve arama tercihleri silinir"},
     {L"vs-diagnose", L"Kamil: VS bağlantısını test et", L"Açık VS 2022/2026 örnekleri, Output bölmeleri ve CMake komut adları raporu"},
     {L"quit", L"Kamil: Çıkış", L"Kamil'i kapatır (kısayol devre dışı kalır)"},
@@ -114,7 +115,7 @@ int App::run(HINSTANCE instance, bool autostart) {
     cb.need_icon = [this](const Item& item, uint32_t size) {
         std::wstring source = item.icon_source;
         if (source.empty()) source = item.kind == ItemKind::Command ? paths_.exe.wstring() : item.target;
-        icon_loader_->request(item.key, source, size);
+        icon_loader_->request(item.icon_cache_key(), source, size);
     };
     cb.copy_item = [this](const Item& item) {
         copy_to_clipboard(hwnd_, item.path.empty() ? item.target : item.path);
@@ -151,6 +152,10 @@ int App::run(HINSTANCE instance, bool autostart) {
     UnregisterHotKey(hwnd_, kHotkeyId);
     watcher_.stop();
     tray_.destroy();
+    if (file_scan_.joinable()) {
+        file_scan_cancel_ = true;
+        file_scan_.join();
+    }
     vs_.reset();
     git_.reset();
     icon_loader_.reset();
@@ -268,6 +273,14 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
         expanded.resize(n > 0 && n <= expanded.size() ? n - 1 : 0);
         search_options_.folder_boosts.push_back({normalize_folder(expanded.empty() ? raw : expanded), static_cast<int>(prio->as_int())});
     }
+    for (const auto& obj : s.get_objects(keys::kSearchFolders)) {
+        const Value* p = obj.find("path");
+        const Value* prio = obj.find("priority");
+        if (p && prio && prio->as_int() != 0)
+            search_options_.folder_boosts.push_back({normalize_folder(expand_env(widen(p->as_string()))), static_cast<int>(prio->as_int())});
+    }
+    if (initial || touched(keys::kSearchFolders) || touched(keys::kFolderPriority) || touched(keys::kExcludeDirs) || touched(keys::kMaxFiles))
+        scan_files();
     usage_.set_half_life_days(static_cast<double>(s.get_int(keys::kLearningHalfLife)) / 86'400'000.0);
 
     exclude_patterns_.clear();
@@ -345,7 +358,9 @@ void App::rebuild_items() {
 
 void App::run_query(const std::wstring& query) {
     search_options_.now_unix = now_unix();
-    launcher_.set_results(search(items_, query, usage_, search_options_));
+    std::vector<Hit> hits = search(items_, query, usage_, search_options_);
+    add_file_hits(query, hits);
+    launcher_.set_results(std::move(hits));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -364,6 +379,10 @@ void App::on_activate(const Item& item, LaunchMode mode) {
     if (item.kind == ItemKind::Repo) {
         const std::wstring action = mode == LaunchMode::OpenLocation ? L"explorer" : default_repo_action();
         run_action(item, action);
+        return;
+    }
+    if (item.kind == ItemKind::File || item.kind == ItemKind::Folder) {
+        open_file(item, mode);
         return;
     }
     AllowSetForegroundWindow(ASFW_ANY);  // let the launched program take the foreground
@@ -390,6 +409,7 @@ void App::run_command(const std::wstring& id) {
     } else if (id == L"rescan") {
         apps_provider_.scan_async(hwnd_);
         scan_repos();
+        scan_files();
     } else if (id == L"forget") {
         if (MessageBoxW(hwnd_, L"Öğrenilen tüm sık kullanılanlar ve arama tercihleri silinsin mi?", L"Kamil",
                         MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) == IDYES) {
@@ -482,6 +502,10 @@ std::vector<Item> App::actions_for(const Item& item) const {
         case ItemKind::Command:
             actions.push_back(make_action(L"run", L"Çalıştır", {}, kGlyphPlay, item.subtitle));
             break;
+        case ItemKind::File:
+        case ItemKind::Folder:
+            actions = file_actions(item);
+            break;
         default: {
             Item open = make_action(L"open", L"Aç", item.target, 0);
             open.key = item.key;  // reuse the item's own icon
@@ -507,6 +531,7 @@ void App::run_action(const Item& parent, const std::wstring& action) {
         run_command(parent.target);
         return;
     }
+    if (run_file_action(parent, action)) return;
     if (parent.kind == ItemKind::Repo && run_project_action(parent, action)) return;
     if (action == L"copy-path") {
         copy_to_clipboard(hwnd_, parent.path.empty() ? parent.target : parent.path);
@@ -643,6 +668,21 @@ Footer App::footer_for(const Item* selected, const Item* parent) {
             f.left = with_job(selected->subtitle);
             f.right = L"Enter çalıştır";
             break;
+        case ItemKind::File: {
+            f.left = with_job(selected->subtitle);
+            std::wstring ext = std::filesystem::path(selected->path).extension().wstring();
+            for (auto& c : ext) c = static_cast<wchar_t>(towlower(c));
+            if (is_script_extension(ext))
+                f.right = store_.current()->get_string(keys::kScriptAction) == "edit" ? L"Enter düzenle · Alt+R çalıştır · Ctrl+K"
+                                                                                      : L"Enter çalıştır · Alt+E düzenle · Ctrl+K";
+            else
+                f.right = L"Enter aç · Alt+E düzenle · Ctrl+K";
+            break;
+        }
+        case ItemKind::Folder:
+            f.left = with_job(selected->subtitle);
+            f.right = L"Enter Gezgin · Ctrl+K eylemler";
+            break;
         default:
             f.left = with_job(selected->path);
             f.right = L"Enter aç · Ctrl+K eylemler · Tab";
@@ -707,7 +747,11 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
     }
     switch (msg) {
         case WM_HOTKEY:
-            if (wp == kHotkeyId) launcher_.toggle();
+            if (wp == kHotkeyId) {
+                // New scripts appear without waiting for the periodic rescan.
+                if (!launcher_.visible() && GetTickCount64() - files_scanned_at_ > 120'000) scan_files();
+                launcher_.toggle();
+            }
             return 0;
         case WM_KAMIL_SHOW:
             launcher_.show();
@@ -756,6 +800,9 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             launcher_.refresh_footer();
             return 0;
         }
+        case WM_KAMIL_FILES_READY:
+            on_files_ready(std::unique_ptr<FileIndex>(reinterpret_cast<FileIndex*>(lp)));
+            return 0;
         case WM_KAMIL_VS_EVENT: {
             std::unique_ptr<VsEvent> e(reinterpret_cast<VsEvent*>(lp));
             on_vs_event(*e);
@@ -788,6 +835,7 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             } else if (wp == kTimerRescanApps) {
                 apps_provider_.scan_async(hwnd_);
                 scan_repos();
+                scan_files();
             }
             return 0;
         case WM_SETTINGCHANGE:

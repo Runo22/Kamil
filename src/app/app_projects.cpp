@@ -238,6 +238,17 @@ std::vector<Item> App::project_actions(const Item& repo) {
 }
 
 bool App::quick_action(const Item& item, wchar_t key) {
+    if (item.kind == ItemKind::File || item.kind == ItemKind::Folder) {
+        if (key == L'E') {
+            edit_file(item);
+            return true;
+        }
+        if (key == L'R' && item.kind == ItemKind::File) {
+            run_script(item, false);
+            return true;
+        }
+        return false;
+    }
     if (item.kind != ItemKind::Repo || !is_project(item.path)) return false;
     switch (key) {
         case L'D': return run_project_action(item, L"proj-debug");

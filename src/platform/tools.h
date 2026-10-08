@@ -14,6 +14,11 @@ struct Tools {
     std::wstring git;
     std::wstring git_bash;
     std::wstring git_gui;
+    std::wstring bash;      // Git for Windows bash.exe
+    std::wstring py;        // Python launcher py.exe
+    std::wstring pyw;       // pyw.exe (no console)
+    std::wstring python;    // python.exe on PATH
+    std::wstring pythonw;
     std::wstring explorer;
     std::wstring cmd;
     std::wstring powershell;

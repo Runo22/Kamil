@@ -252,3 +252,24 @@ TEST(search_folder_priority) {
     opt.folder_boosts.push_back({normalize_folder(L"D:\\src\\ana"), 40});  // longest prefix wins
     CHECK_EQ(folder_bonus(fold(L"D:\\src\\ana\\sensor"), opt.folder_boosts), 40);
 }
+
+#include "core/pixels.h"
+
+TEST(icon_pixels_premultiply) {
+    // Straight alpha: a half transparent white edge pixel must become 50% grey, not stay white.
+    std::vector<uint32_t> px{0xFFFF0000u, 0x80FFFFFFu, 0x00000000u};
+    CHECK(normalize_icon_pixels(px));
+    CHECK_EQ(px[0], 0xFFFF0000u);
+    CHECK_EQ(px[1], 0x80808080u);
+    CHECK_EQ(px[2], 0x00000000u);
+
+    // Already premultiplied: untouched.
+    std::vector<uint32_t> pre{0xFF102030u, 0x80404040u};
+    CHECK(!normalize_icon_pixels(pre));
+    CHECK_EQ(pre[1], 0x80404040u);
+
+    // No alpha at all (legacy icon): opaque.
+    std::vector<uint32_t> legacy{0x00112233u};
+    CHECK(normalize_icon_pixels(legacy));
+    CHECK_EQ(legacy[0], 0xFF112233u);
+}

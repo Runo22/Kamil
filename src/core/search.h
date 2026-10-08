@@ -42,6 +42,11 @@ struct Hit {
     std::vector<uint16_t> positions;  // matched character indices in item->title (for highlighting)
 };
 
+// Score added for what the user picked before (frecency + "this prefix -> this item").
+int learning_bonus(double frecency, double affinity);
+// Result order: score, then shorter title, then title.
+bool hit_better(const Hit& a, const Hit& b);
+
 // Ranks `items` for `query`. Score = fuzzy match + learned affinity + frecency (+ alias boost).
 // With an empty query it returns the most frequently/recently used items.
 std::vector<Hit> search(std::span<const Item> items, std::wstring_view query, const UsageStore& usage,

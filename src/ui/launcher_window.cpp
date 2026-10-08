@@ -734,10 +734,11 @@ void LauncherWindow::on_icon(const IconResult& r) {
 
 ID2D1Bitmap1* LauncherWindow::icon_for(const Item& item) {
     const uint32_t want = static_cast<uint32_t>(std::lround(px(s(32.f))));
-    auto it = icons_.find(item.key);
+    const std::wstring& key = item.icon_cache_key();
+    auto it = icons_.find(key);
     if (it == icons_.end() || (!it->second.failed && it->second.size != want)) {
-        if (!icon_pending_.count(item.key) && cb_.need_icon) {
-            icon_pending_.insert(item.key);
+        if (!icon_pending_.count(key) && cb_.need_icon) {
+            icon_pending_.insert(key);
             cb_.need_icon(item, want);
         }
         return nullptr;
@@ -887,11 +888,14 @@ void LauncherWindow::draw_row(ID2D1DeviceContext* dc, size_t index, float y) {
     }
 
     // icon
-    const float icon = s(32.f);
-    const float ix = x0 + 16.f, iy = y + (row_h_ - icon) / 2.f;
+    // Icons are drawn 1:1 on whole device pixels: no resampling blur at fractional DPI scales.
+    const float to_dip = 96.f / dpi_;
+    const float icon = std::round(px(s(32.f))) * to_dip;
+    const float ix = std::round(px(x0 + 16.f)) * to_dip;
+    const float iy = std::round(px(y + (row_h_ - icon) / 2.f)) * to_dip;
     ID2D1Bitmap1* bmp = item.glyph && item.icon_source.empty() ? nullptr : icon_for(item);
     if (bmp) {
-        dc->DrawBitmap(bmp, D2D1::RectF(ix, iy, ix + icon, iy + icon), 1.f, D2D1_INTERPOLATION_MODE_LINEAR);
+        dc->DrawBitmap(bmp, D2D1::RectF(ix, iy, ix + icon, iy + icon), 1.f, D2D1_INTERPOLATION_MODE_LINEAR);  // 1:1 when sizes match
     } else if (item.glyph && fmt_glyph_) {  // no program icon (or it could not be extracted)
         brush->SetColor(with_alpha(pal_.text_secondary, 0.14f));
         dc->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(ix, iy, ix + icon, iy + icon), 7.f, 7.f), brush.Get());

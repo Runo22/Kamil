@@ -34,10 +34,12 @@ endif()
 
 add_library(kamil_core STATIC
     src/core/cmake.cpp
+    src/core/file_index.cpp
     src/core/fuzzy.cpp
     src/core/git.cpp
     src/core/hotkey.cpp
     src/core/line_edit.cpp
+    src/core/pixels.cpp
     src/core/project_state.cpp
     src/core/ryml_support.cpp
     src/core/search.cpp
@@ -58,6 +60,7 @@ if(WIN32)
     add_executable(Kamil WIN32
         src/app/main.cpp
         src/app/app.cpp
+        src/app/app_files.cpp
         src/app/app_projects.cpp
         src/app/paths.cpp
         src/platform/com_ports.cpp
@@ -94,7 +97,7 @@ endif()
 
 if(KAMIL_BUILD_TESTS)
     enable_testing()
-    add_executable(kamil_tests tests/test_main.cpp tests/test_cmake.cpp tests/test_core.cpp tests/test_git.cpp tests/test_settings.cpp)
+    add_executable(kamil_tests tests/test_main.cpp tests/test_cmake.cpp tests/test_core.cpp tests/test_file_index.cpp tests/test_git.cpp tests/test_settings.cpp)
     target_link_libraries(kamil_tests PRIVATE kamil_core)
     target_compile_options(kamil_tests PRIVATE ${KAMIL_WARNINGS})
     if(MINGW)
