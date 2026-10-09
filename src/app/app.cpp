@@ -69,6 +69,8 @@ constexpr BuiltinCommand kCommands[] = {
     {L"vs-diagnose", L"Kamil: Test VS connection", L"Kamil: VS bağlantısını test et",
      L"Report: Visual Studio 2022/2026 instances, Output panes, CMake command names, administrator rights",
      L"Rapor: açık VS 2022/2026 örnekleri, Output bölmeleri, CMake komut adları, yönetici hakları"},
+    {L"diagnostics", L"Kamil: Diagnostics", L"Kamil: Tanılama",
+     L"Report: version, folders, index, search speed, Visual Studio, crash dumps", L"Rapor: sürüm, klasörler, indeks, arama hızı, Visual Studio, çökme dökümleri"},
     {L"log", L"Kamil: Open log", L"Kamil: Günlüğü aç", L"kamil.log: what Kamil did, especially with Visual Studio",
      L"kamil.log: Kamil'in yaptıkları, özellikle Visual Studio ile"},
     {L"quit", L"Kamil: Quit", L"Kamil: Çıkış", L"Closes Kamil (the hotkey stops working)", L"Kamil'i kapatır (kısayol devre dışı kalır)"},
@@ -118,6 +120,7 @@ int App::run(HINSTANCE instance, bool autostart) {
     if (FAILED(LoadIconMetric(instance_, MAKEINTRESOURCEW(IDI_KAMIL), LIM_SMALL, &icon_)))
         icon_ = LoadIconW(nullptr, IDI_APPLICATION);
     tray_.create(hwnd_, icon_, L"Kamil");
+    report_crashes();
 
     executor_ = std::make_unique<Executor>();
     icon_loader_ = std::make_unique<IconLoader>(hwnd_);
@@ -161,7 +164,7 @@ int App::run(HINSTANCE instance, bool autostart) {
     apps_provider_.scan_async(hwnd_);
     SetTimer(hwnd_, kTimerRescanApps, kRescanIntervalMs, nullptr);
 
-    if (!autostart && hotkey_ok_)
+    if (!autostart && hotkey_ok_ && !crashed_last_time_)
         notify(loc(L"Kamil is running", L"Kamil çalışıyor"),
                fmt(loc(L"Press {} to open it.", L"Açmak için {} tuşlarına basın."), hotkey_display(hotkey_text_)), Tray::Balloon::Info);
 
@@ -183,6 +186,7 @@ int App::run(HINSTANCE instance, bool autostart) {
         warm_cancel_ = true;
         warm_.join();
     }
+    fs_watcher_.stop();
     vs_.reset();
     git_.reset();
     icon_loader_.reset();
@@ -406,9 +410,14 @@ void App::rebuild_items() {
 }
 
 void App::run_query(const std::wstring& query) {
+    LARGE_INTEGER t0, t1, freq;
+    QueryPerformanceCounter(&t0);
     search_options_.now_unix = now_unix();
     std::vector<Hit> hits = search(items_, query, usage_, search_options_);
     add_file_hits(query, hits);
+    QueryPerformanceCounter(&t1);
+    QueryPerformanceFrequency(&freq);
+    if (!query.empty()) record_query_time(static_cast<double>(t1.QuadPart - t0.QuadPart) * 1000.0 / static_cast<double>(freq.QuadPart));
     launcher_.set_results(std::move(hits));
 }
 
@@ -484,6 +493,8 @@ void App::run_command(const std::wstring& id) {
                loc(L"The report opens in a few seconds.", L"Rapor birkaç saniye içinde açılacak."), Tray::Balloon::Info);
     } else if (id == L"jobs") {
         show_jobs();
+    } else if (id == L"diagnostics") {
+        write_diagnostics();
     } else if (id == L"log") {
         const auto file = log_file();
         executor_->post([file] { open_in_editor(file); });
@@ -868,8 +879,8 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_HOTKEY:
             if (wp == kHotkeyId) {
-                // New scripts appear without waiting for the periodic rescan.
-                if (!launcher_.visible() && GetTickCount64() - files_scanned_at_ > 120'000) scan_files();
+                // Folders that cannot be watched (e.g. some network shares): rescan when the window opens.
+                if (!launcher_.visible() && watched_roots_ < index_roots_ && GetTickCount64() - files_scanned_at_ > 120'000) scan_files();
                 launcher_.toggle();
             }
             return 0;
@@ -932,6 +943,11 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_KAMIL_FILES_READY:
             on_files_ready(std::unique_ptr<FileIndex>(reinterpret_cast<FileIndex*>(lp)));
             return 0;
+        case WM_KAMIL_FS_CHANGES: {
+            std::unique_ptr<std::vector<FsChange>> changes(reinterpret_cast<std::vector<FsChange>*>(lp));
+            on_fs_changes(*changes);
+            return 0;
+        }
         case WM_KAMIL_VS_EVENT: {
             std::unique_ptr<VsEvent> e(reinterpret_cast<VsEvent*>(lp));
             on_vs_event(*e);
@@ -961,6 +977,19 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
                 usage_.save(paths_.usage_file());
             } else if (wp == 4) {  // job clock in the footer
                 launcher_.refresh_footer();
+            } else if (wp == kTimerFileRescan) {
+                // At most one automatic rescan per 30 s: a build writing into a search folder
+                // must not keep the scanner busy.
+                const ULONGLONG since = GetTickCount64() - files_scanned_at_;
+                if (since < 30'000) {
+                    SetTimer(hwnd_, kTimerFileRescan, static_cast<UINT>(30'000 - since), nullptr);
+                } else {
+                    KillTimer(hwnd_, kTimerFileRescan);
+                    scan_files();
+                }
+            } else if (wp == kTimerSaveIndex) {
+                KillTimer(hwnd_, kTimerSaveIndex);
+                save_index_cache();
             } else if (wp == kTimerRescanApps) {
                 apps_provider_.scan_async(hwnd_);
                 scan_repos();

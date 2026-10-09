@@ -1,6 +1,7 @@
 #include <cwchar>
 
 #include "app/app.h"
+#include "platform/crash.h"
 #include "platform/win.h"
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR cmd_line, int) {
@@ -19,6 +20,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR cmd_line, int) {
         return 0;
     }
 
+    kamil::install_crash_handler(kamil::resolve_paths().cache_dir);
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);  // also set in the manifest
     if (FAILED(OleInitialize(nullptr))) return 1;  // STA + clipboard
 

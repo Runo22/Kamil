@@ -24,6 +24,7 @@ enum : UINT {
     WM_KAMIL_GIT_STATUS = WM_APP + 9,   // lParam: RepoState* (ownership transferred)
     WM_KAMIL_VS_EVENT = WM_APP + 10,    // lParam: VsEvent* (ownership transferred)
     WM_KAMIL_FILES_READY = WM_APP + 11, // lParam: FileIndex* (ownership transferred)
+    WM_KAMIL_FS_CHANGES = WM_APP + 12,  // lParam: std::vector<FsChange>* (ownership transferred)
 };
 
 inline constexpr wchar_t kAppWindowClass[] = L"Kamil.AppWindow";

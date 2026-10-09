@@ -10,6 +10,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Static CRT: Kamil.exe runs on machines without the VC++ redistributable.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+# Commit id shown in "Kamil: Diagnostics" (empty outside a git checkout).
+execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                OUTPUT_VARIABLE KAMIL_COMMIT OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+
 option(KAMIL_BUILD_TESTS "Build the platform independent unit tests" ON)
 
 if(MSVC)
@@ -51,7 +55,8 @@ add_library(kamil_core STATIC
     src/core/usage.cpp
 )
 target_include_directories(kamil_core PUBLIC src)
-target_link_libraries(kamil_core PUBLIC kamil_ryml)
+find_package(Threads REQUIRED)
+target_link_libraries(kamil_core PUBLIC kamil_ryml Threads::Threads)
 target_compile_options(kamil_core PRIVATE ${KAMIL_WARNINGS})
 
 # ---------------------------------------------------------------------------------------------
@@ -64,14 +69,17 @@ if(WIN32)
         src/app/app.cpp
         src/app/app_files.cpp
         src/app/app_projects.cpp
+        src/app/app_diagnostics.cpp
         src/app/paths.cpp
         src/platform/com_ports.cpp
+        src/platform/crash.cpp
         src/platform/file_watcher.cpp
         src/platform/icon_loader.cpp
         src/platform/process.cpp
         src/platform/shell.cpp
         src/platform/system_theme.cpp
         src/platform/tools.cpp
+        src/platform/tree_watcher.cpp
         src/platform/tray.cpp
         src/platform/vs_bridge.cpp
         src/providers/apps_provider.cpp
@@ -84,7 +92,7 @@ if(WIN32)
         d2d1 dwrite d3d11 dxgi dcomp dwmapi windowscodecs
         setupapi shell32 shcore shlwapi ole32 oleaut32 uuid propsys comctl32 user32 gdi32 advapi32)
     target_compile_definitions(Kamil PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN
-        _WIN32_WINNT=0x0A00 WINVER=0x0A00 KAMIL_VERSION="${PROJECT_VERSION}")
+        _WIN32_WINNT=0x0A00 WINVER=0x0A00 KAMIL_VERSION="${PROJECT_VERSION}" KAMIL_COMMIT="${KAMIL_COMMIT}")
     target_compile_options(Kamil PRIVATE ${KAMIL_WARNINGS})
     set_target_properties(Kamil PROPERTIES INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
     if(MSVC)
@@ -106,4 +114,11 @@ if(KAMIL_BUILD_TESTS)
         target_link_options(kamil_tests PRIVATE -static)
     endif()
     add_test(NAME kamil_tests COMMAND kamil_tests)
+
+    add_executable(kamil_bench tests/bench.cpp)
+    target_link_libraries(kamil_bench PRIVATE kamil_core)
+    target_compile_options(kamil_bench PRIVATE ${KAMIL_WARNINGS})
+    if(MINGW)
+        target_link_options(kamil_bench PRIVATE -static)
+    endif()
 endif()

@@ -38,3 +38,8 @@ jobs:
         run: |
           cmake --preset mingw-check
           cmake --build --preset mingw-check -j
+      - name: Search benchmark (informational)
+        run: |
+          cmake -S . -B out/build/bench -DCMAKE_BUILD_TYPE=Release
+          cmake --build out/build/bench --target kamil_bench -j
+          out/build/bench/kamil_bench

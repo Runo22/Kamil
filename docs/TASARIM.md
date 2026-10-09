@@ -1,6 +1,6 @@
 # Kamil — Windows için Offline, Geliştirici Odaklı Başlatıcı
 
-> Durum: **Taslak v1.1** · Uygulama: **Faz 0 + git + Faz 1 + dosya/script araması kodlandı** (bkz. README) · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
+> Durum: **Taslak v1.2** · Uygulama: **Faz 0 + git + Faz 1 + dosya/script araması kodlandı** (bkz. README) · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
 
 İnternetsiz bir Windows iş bilgisayarı için; uygulama/dosya/klasör/LAN
 kaynaklarını anında bulan; script'leri, özel komutları, süreçleri ve CMake projelerinin
@@ -785,6 +785,8 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 | CMake + VS: preset/hedef/argüman/COM seçimi, VS'te build/configure (DTE), debug (başlat+bağlan), çalıştır | ✓ (gerçek VS'te doğrulanacak) |
 | İki dilli arayüz (İngilizce / Türkçe, sistem diline göre), komutlar iki dilde de aranır | ✓ |
 | VS iş kuyruğu: görünür liste, iptal, sınırlı ve nedenli beklemeler, yönetici VS tespiti, `kamil.log` | ✓ |
+| Sağlamlaştırma: minidump + "Kamil: Diagnostics", dosya indeksinin canlı güncellenmesi (`ReadDirectoryChangesW`) + disk önbelleği, `kamil_bench` | ✓ |
+| Hız: File API önbelleği + arka planda ön okuma (Ctrl+K anında), yazarken daraltan + paralel dosya araması (200 bin dosyada tuş başı ~3–10 ms) | ✓ |
 | Eylem paneli, `Tab` tamamlama, alt bilgi çubuğu, iş durumu | ✓ |
 
 ### 11.2 Sıradaki fazlar
@@ -795,10 +797,8 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 
 | İş | Neden | Büyüklük |
 |---|---|---|
-| Çökme dökümü (minidump) + "Kamil: Tanılama" (günlük dosyası `kamil.log` eklendi) | Sorun çıktığında tahmin yerine kayıtla düzeltmek için | K |
-| Gerçek kullanım geri bildirimleri: VS köprüsü (komut adları, build bitişi, attach), ikonlar, odak/kısayol | Faz 1 hiçbir gerçek VS'e karşı denenmedi | O |
-| Dosya indeksinde canlı güncelleme (`ReadDirectoryChangesW`) + diske önbellek | Yeni script'in anında görünmesi, açılışta tam tarama beklememek | O |
-| Performans ölçümü (`kamil-bench`): tuş başı gecikme p50/p99, açılış süresi | "Hızlı olması kritik" hedefini sayıyla korumak | K |
+| ~~Çökme dökümü + "Kamil: Diagnostics"~~, ~~canlı dosya indeksi + disk önbelleği~~, ~~`kamil_bench`~~ | Yapıldı (v1.2) | — |
+| Gerçek kullanım geri bildirimleri: VS köprüsü (komut adları, build bitişi, attach), ikonlar, odak/kısayol | Sürüyor: Build tetikleme doğrulandı | O |
 
 **Faz B — Günlük iş akışı (ilk istekte olan ama henüz olmayanlar)**
 
@@ -813,7 +813,6 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 | İş | Neden | Büyüklük |
 |---|---|---|
 | Konsol penceresi: çalıştırma/build çıktıları sekmelerde, hata listesi → satıra git (VS / VS Code) | Farklı preset'leri "ayrı ayrı göster" isteğinin tam karşılığı | B |
-| Süreç yönetimi: `kill`, `lock <dosya>` (LNK1168 çözümü), `port 8080` | İlk istek: "kill program"; build kilitlenmelerinde günlük ihtiyaç | O |
 | Hata kodu (`err 0x80070005`), hex/bin hesap (`= 0x1F<<3`) | C++ geliştirmede sık; küçük iş | K |
 | VS: IDE içi F5 modu (`launch.vs.json`), preset değiştirme (bulunabilirse) | Gerçek kullanım geri bildirimine göre | O |
 
@@ -826,6 +825,7 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 | Saat/sıra tabanlı tahmin ("muhtemelen şimdi") | Mevcut öğrenme yetersiz kalırsa |
 | Windows 11 Acrylic | Windows 11'e geçilirse |
 | Ayarlar penceresi (şemadan üretilen form, §9.3) | **Ertelendi**: kullanıcı tekrar isteyince |
+| Süreç araçları: `kill`, `lock <dosya>` (LNK1168), `port 8080` | **Ertelendi**: kullanıcı tekrar isteyince |
 
 ### 11.3 Bilinçli olarak yapılmayacaklar
 

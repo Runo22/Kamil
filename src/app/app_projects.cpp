@@ -193,8 +193,9 @@ void App::warm_projects() {
                 models += read_codemodel(p.binary_dir).valid;  // fills the codemodel cache
             }
         }
+        warm_ms_ = GetTickCount64() - start;
         log_line("[projects] warmed " + std::to_string(roots.size()) + " projects, " + std::to_string(models) + " codemodels in " +
-                 std::to_string(GetTickCount64() - start) + " ms");
+                 std::to_string(warm_ms_) + " ms");
     });
 }
 

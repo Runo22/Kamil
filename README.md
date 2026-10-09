@@ -30,8 +30,11 @@ Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 | COM port seçimi (dostu ad, VID/PID ile hatırlama), argüman şablonu `--port {com}` | ✓ |
 | İki dilli arayüz (İngilizce / Türkçe); dahili komutlar iki dilde de aranır (`settings` = `ayarlar`) | ✓ |
 | VS iş kuyruğu: **Kamil: VS jobs** listesi, iptal, sınırlı ve nedenli beklemeler, `kamil.log` | ✓ |
-| Konsol penceresi (çıktıları Kamil içinde sekmeli gösterme) | sıradaki |
-| Özel komutlar, öğe başına kısayollar, LAN yer imleri | Faz B |
+| Dosya indeksi canlı güncellenir (yeni script anında çıkar), diske önbelleklenir (açılışta hemen hazır) | ✓ |
+| Çökme dökümü (minidump) + **Kamil: Diagnostics** raporu (sürüm, indeks, arama hızı, VS, dökümler) | ✓ |
+| Özel komutlar + global kısayollar (ör. her yerden son projeyi derle) | sıradaki |
+| Konsol penceresi (çıktıları Kamil içinde sekmeli gösterme) | sonra |
+| Süreç araçları (kill, dosyayı kilitleyen süreç) | ertelendi (istenince) |
 | Ayarlar penceresi | ertelendi (istenince) |
 | Windows 11 Acrylic arka plan | sonraki adım (şu an iki sistemde de düz yüzey) |
 
@@ -97,8 +100,12 @@ search:
 | klasörler | Gezgin | — | VS Code, Visual Studio (Open Folder), terminal |
 
 `scripts.default_action: edit` ile Enter düzenlemeye, `Alt+R` çalıştırmaya döner. `scripts.keep_console_open: false`
-konsolun iş bitince kapanmasını sağlar. Yeni dosyalar, pencereyi açtığında (2 dk'dan eski indekste) veya
-"Kamil: Yeniden tara" ile görünür.
+konsolun iş bitince kapanmasını sağlar. Klasörler izlenir: yeni, silinen ve yeniden adlandırılan dosyalar anında
+güncellenir; indeks diske kaydedilir, Kamil açılır açılmaz arama yapılabilir. İzlenemeyen klasörler (bazı ağ
+paylaşımları) pencere açılırken yeniden taranır.
+
+**Sorun bildirmek için:** *Kamil: Diagnostics* sürümü, klasörleri, indeks boyutunu, tuş başı arama süresini
+(p50/p95), VS durumunu ve varsa çökme dökümlerini (`crash-*.dmp`) tek bir raporda açar.
 
 ## Projeler: build, debug, çalıştır
 
@@ -181,7 +188,7 @@ src/platform/   Win32 yardımcıları (tray, ikonlar, dosya izleme, kabuk işlem
 src/providers/  sonuç kaynakları (uygulamalar, git depoları)
 src/ui/         arama penceresi ve Direct2D çizim katmanı
 src/app/        uygulama: mesaj döngüsü, ayarların uygulanması
-tests/          birim testleri (bağımlılıksız mini çerçeve)
+tests/          birim testleri (bağımlılıksız mini çerçeve) + kamil_bench (arama hızı ölçümü)
 tools/          vs-probe.ps1: VS2022/2026 DTE (COM) yeteneklerini ölçer
 third_party/    rapidyaml (MIT, tek başlık)
 ```

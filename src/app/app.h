@@ -19,6 +19,7 @@
 #include "platform/file_watcher.h"
 #include "platform/icon_loader.h"
 #include "platform/tools.h"
+#include "platform/tree_watcher.h"
 #include "platform/shell.h"
 #include "platform/tray.h"
 #include "platform/vs_bridge.h"
@@ -89,6 +90,13 @@ private:
     // Files and scripts (app_files.cpp)
     void scan_files();
     void on_files_ready(std::unique_ptr<FileIndex> index);
+    void on_fs_changes(const std::vector<FsChange>& changes);
+    void save_index_cache();
+
+    // Diagnostics (app_diagnostics.cpp)
+    void report_crashes();
+    void write_diagnostics();
+    void record_query_time(double ms);
     Item make_file_item(const std::wstring& path, bool is_dir) const;
     void add_file_hits(const std::wstring& query, std::vector<Hit>& hits);
     void run_detached(std::wstring exe, std::wstring args, std::wstring dir, bool admin, std::wstring title, const wchar_t* verb = nullptr);
@@ -170,10 +178,20 @@ private:
     bool tools_ready_ = false;
     std::vector<Item> items_;  // commands + filtered apps; LauncherWindow keeps pointers into it
     std::unique_ptr<FileIndex> file_index_;
+    FileIndex::SearchState file_search_;  // previous keystroke's matches (narrowing while typing)
     std::vector<Item> query_items_;  // file results of the current query (the launcher points into it)
     std::thread file_scan_;
     std::atomic<bool> file_scan_cancel_{false};
     ULONGLONG files_scanned_at_ = 0;
+    ULONGLONG files_scan_ms_ = 0;      // duration of the last full scan
+    uint64_t index_hash_ = 0;          // settings the current file index was built for
+    size_t index_roots_ = 0, watched_roots_ = 0;
+    TreeWatcher fs_watcher_;           // keeps file_index_ current between scans
+    enum : UINT_PTR { kTimerFileRescan = 5, kTimerSaveIndex = 6 };
+    std::vector<float> query_ms_;      // recent search times (ring buffer), for Diagnostics
+    size_t query_next_ = 0;
+    std::atomic<ULONGLONG> warm_ms_{0};  // written by the warm thread
+    bool crashed_last_time_ = false;
     std::thread warm_;  // pre-reads CMake presets and File API replies so Ctrl+K opens instantly
     std::atomic<bool> warm_cancel_{false};
 

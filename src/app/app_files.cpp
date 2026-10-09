@@ -3,10 +3,13 @@
 
 #include <algorithm>
 #include <cwctype>
+#include <fstream>
+#include <sstream>
 
 #include "app/action_item.h"
 #include "app/app.h"
 #include "core/i18n.h"
+#include "core/log.h"
 #include "core/settings_schema.h"
 #include "core/text.h"
 #include "platform/process.h"
@@ -78,10 +81,32 @@ void App::scan_files() {
         file_scan_cancel_ = true;
         file_scan_.join();
     }
+    // New settings (or the first scan): show the index saved for these settings right away and
+    // watch the roots; the scan below then brings it up to date.
+    const uint64_t hash = FileIndex::config_hash(roots, opt);
+    if (hash != index_hash_) {
+        index_hash_ = hash;
+        file_index_.reset();
+        std::ifstream in(paths_.cache_dir / "files.bin", std::ios::binary);
+        if (in) {
+            std::ostringstream ss;
+            ss << in.rdbuf();
+            if (auto cached = FileIndex::deserialize(ss.str(), hash, roots)) {
+                file_index_ = std::make_unique<FileIndex>(std::move(*cached));
+                log_line("[files] cached index loaded: " + std::to_string(file_index_->size()) + " entries");
+            }
+        }
+        std::vector<std::filesystem::path> paths;
+        for (const auto& r : roots) paths.push_back(r.path);
+        index_roots_ = roots.size();
+        watched_roots_ = fs_watcher_.start(paths, hwnd_);
+        log_line("[files] watching " + std::to_string(watched_roots_) + " of " + std::to_string(index_roots_) + " folders");
+    }
     file_scan_cancel_ = false;
     files_scanned_at_ = GetTickCount64();
     const HWND target = hwnd_;
     file_scan_ = std::thread([this, roots = std::move(roots), opt = std::move(opt), target] {
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
         auto* index = new FileIndex(FileIndex::build(roots, opt, &file_scan_cancel_));
         if (file_scan_cancel_) {
             delete index;
@@ -91,8 +116,59 @@ void App::scan_files() {
     });
 }
 
+void App::on_fs_changes(const std::vector<FsChange>& changes) {
+    if (!file_index_) return;
+    bool changed = false, rescan = false;
+    for (const auto& c : changes) {
+        switch (c.type) {
+            case FsChange::Type::Overflow:
+                rescan = true;
+                break;
+            case FsChange::Type::Added: {
+                const DWORD attr = GetFileAttributesW(c.path.c_str());
+                if (attr == INVALID_FILE_ATTRIBUTES) break;  // already gone again
+                if (attr & FILE_ATTRIBUTE_DIRECTORY) {
+                    // A new folder (possibly with content, e.g. moved in): rescan if it is inside the index.
+                    if (file_index_->is_indexed_dir(std::filesystem::path(c.path).parent_path().wstring())) rescan = true;
+                } else {
+                    changed |= file_index_->add_file(c.path);
+                }
+                break;
+            }
+            case FsChange::Type::Removed:
+                if (file_index_->is_indexed_dir(c.path)) rescan = true;
+                changed |= file_index_->remove(c.path);
+                break;
+        }
+    }
+    if (rescan) SetTimer(hwnd_, kTimerFileRescan, 2000, nullptr);  // debounced: folder operations come in bursts
+    if (changed) SetTimer(hwnd_, kTimerSaveIndex, 30'000, nullptr);
+}
+
+void App::save_index_cache() {
+    if (!file_index_) return;
+    auto blob = std::make_shared<std::string>(file_index_->serialize(index_hash_));
+    const auto file = paths_.cache_dir / "files.bin";
+    executor_->post([blob, file] {
+        std::error_code ec;
+        std::filesystem::create_directories(file.parent_path(), ec);
+        auto tmp = file;
+        tmp += L".tmp";
+        {
+            std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+            out.write(blob->data(), static_cast<std::streamsize>(blob->size()));
+            if (!out) return;
+        }
+        std::filesystem::rename(tmp, file, ec);  // atomic replace: a crash never leaves half a cache
+    });
+}
+
 void App::on_files_ready(std::unique_ptr<FileIndex> index) {
+    files_scan_ms_ = GetTickCount64() - files_scanned_at_;
+    log_line("[files] scan: " + std::to_string(index->size()) + " entries in " + std::to_string(files_scan_ms_) + " ms" +
+             (index->truncated() ? " (truncated at search.max_files)" : ""));
     file_index_ = std::move(index);
+    SetTimer(hwnd_, kTimerSaveIndex, 5000, nullptr);
     // A visible list keeps its selection; the new index is used from the next keystroke on.
     if (!launcher_.visible()) run_query(launcher_.query());
 }
@@ -142,7 +218,7 @@ void App::add_file_hits(const std::wstring& query, std::vector<Hit>& hits) {
     if (!file_index_) return;
 
     const std::wstring folded_query = matcher.folded_query();
-    for (const auto& m : file_index_->search(matcher, limit)) {
+    for (const auto& m : file_index_->search(matcher, limit, &file_search_)) {
         query_items_.push_back(make_file_item(file_index_->path(m.entry), file_index_->is_dir(m.entry)));
         const Item& item = query_items_.back();
         int score = m.score;
