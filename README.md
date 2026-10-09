@@ -59,7 +59,8 @@ Tek bir `Kamil.exe` üretilir (statik CRT, ek DLL gerekmez). VS2022 ile de derle
 | `↑ ↓`, `Ctrl+J`, `PgUp/PgDn`, fare tekerleği | Sonuçlarda gezin |
 | `Tab` | Seçili öğenin adını arama kutusuna yaz (tamamla) |
 | `Ctrl+K` veya metnin sonunda `→` | Eylem paneli; `Esc`/`←` geri |
-| `Alt+D` / `Alt+B` / `Alt+R` (CMake projesi seçiliyken) | Debug / Build / Çalıştır — seçili preset, hedef, port ve argümanlarla |
+| `Alt+C` / `Alt+B` / `Alt+D` (CMake projesi seçiliyken) | CMake Configure / Build / Debug — seçili preset, hedef, port ve argümanlarla (`Alt+R` çalıştırır) |
+| Alt bilgideki tuş çipleri | Tıklanabilir: tuşla aynı işi yapar |
 | `Enter` | Aç |
 | `Ctrl+Enter` | Dosya konumunu Gezgin'de göster |
 | `Shift+Enter` | Yönetici olarak çalıştır |
@@ -103,6 +104,7 @@ konsolun iş bitince kapanmasını sağlar. Yeni dosyalar, pencereyi açtığın
 
 `dev.project_roots` altındaki git depoları ve CMake projeleri aramada çıkar. Bir CMake projesi seçiliyken:
 
+- `Alt+C` **Configure**: VS'e CMake configure (Generate Cache) gönderilir; bitince hedef listesi arka planda yeniden okunur.
 - `Alt+D` **Debug**: VS'te Build All → başarılıysa program yeni bir konsolda **duraklatılmış** başlatılır → VS debugger'ı
   bağlanır → program devam eder (`main`'deki breakpoint'ler de tutar). Argümanlar ve COM port tamamen Kamil'den gelir.
 - `Alt+B` **Build**: VS'e `Build.BuildAll` gönderilir; Kamil bitişi izler, sonucu ("✓ 0 hata, 3 uyarı, 41 sn" veya ilk hata)

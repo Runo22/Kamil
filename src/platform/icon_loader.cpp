@@ -45,15 +45,29 @@ bool extract(IWICImagingFactory* wic, const std::wstring& source, uint32_t size,
         *out = std::move(raw);
         return true;
     }
-    // Scale premultiplied data (scaling straight alpha would bring the halo back).
+    // Scale premultiplied data (scaling straight alpha would bring the halo back). Keep the
+    // aspect ratio: the shell may return a non-square image, which must not be squeezed.
+    const UINT longest = std::max(w, h);
+    const UINT sw = std::max<UINT>(1, static_cast<UINT>(static_cast<uint64_t>(w) * size / longest));
+    const UINT sh = std::max<UINT>(1, static_cast<UINT>(static_cast<uint64_t>(h) * size / longest));
     ComPtr<IWICBitmap> pre;
     ComPtr<IWICBitmapScaler> scaler;
     if (FAILED(wic->CreateBitmapFromMemory(w, h, GUID_WICPixelFormat32bppPBGRA, w * 4, static_cast<UINT>(raw.size() * 4),
                                            reinterpret_cast<BYTE*>(raw.data()), &pre)) ||
         FAILED(wic->CreateBitmapScaler(&scaler)) ||
-        FAILED(scaler->Initialize(pre.Get(), size, size, WICBitmapInterpolationModeFant)))
+        FAILED(scaler->Initialize(pre.Get(), sw, sh, WICBitmapInterpolationModeFant)))
         return false;
-    return copy_pixels(scaler.Get(), size, size, out);
+    std::vector<uint32_t> scaled;
+    if (!copy_pixels(scaler.Get(), sw, sh, &scaled)) return false;
+    if (sw == size && sh == size) {
+        *out = std::move(scaled);
+        return true;
+    }
+    out->assign(static_cast<size_t>(size) * size, 0);  // transparent, image centered
+    const UINT ox = (size - sw) / 2, oy = (size - sh) / 2;
+    for (UINT y = 0; y < sh; ++y)
+        std::copy_n(scaled.begin() + static_cast<std::ptrdiff_t>(y) * sw, sw, out->begin() + static_cast<std::ptrdiff_t>((oy + y) * size + ox));
+    return true;
 }
 
 }  // namespace

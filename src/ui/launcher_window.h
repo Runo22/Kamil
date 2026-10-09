@@ -28,9 +28,19 @@ struct LauncherStyle {
     std::string accent = "auto";  // auto | #rrggbb
 };
 
+// A key hint in the footer, drawn as a keycap chip plus a label ("[Alt+B] Build"). Clicking it
+// does what the key does.
+struct FooterHint {
+    enum class Do { None, Activate, Actions, Back, Complete, Quick };
+    std::wstring key;    // "Alt+B", "Enter", "Ctrl+K"
+    std::wstring label;  // "Build"
+    Do action = Do::None;
+    wchar_t letter = 0;  // Do::Quick: the Alt+letter passed to quick_action
+};
+
 struct Footer {
-    std::wstring left;   // context: git branch, changes, path ...
-    std::wstring right;  // key hints
+    std::wstring left;               // context: git branch, changes, preset, running job ...
+    std::vector<FooterHint> hints;   // most important first; trailing ones are dropped when space runs out
 };
 
 class LauncherWindow {
@@ -119,6 +129,8 @@ private:
     void draw_row(ID2D1DeviceContext* dc, size_t index, float y);
     ID2D1Bitmap1* icon_for(const Item& item);
     int row_at(int x_px, int y_px) const;
+    int hint_at(int x_px, int y_px) const;
+    void run_hint(const FooterHint& hint);
     void restart_caret();
 
     float px(float dip) const { return dip * dpi_ / 96.f; }
@@ -132,7 +144,7 @@ private:
     Palette pal_{};
     bool dark_ = true;
 
-    ComPtr<IDWriteTextFormat> fmt_input_, fmt_title_, fmt_subtitle_, fmt_hint_, fmt_letter_, fmt_glyph_, fmt_footer_;
+    ComPtr<IDWriteTextFormat> fmt_input_, fmt_title_, fmt_subtitle_, fmt_hint_, fmt_letter_, fmt_glyph_, fmt_footer_, fmt_key_;
     ComPtr<IDWriteInlineObject> ellipsis_title_, ellipsis_subtitle_;
 
     LineEdit edit_;
@@ -159,6 +171,8 @@ private:
 
     uint64_t hidden_at_ = 0;
     POINT last_mouse_{};
+    std::vector<D2D1_RECT_F> hint_rects_;  // DIPs, parallel to the drawn footer_.hints
+    int hover_hint_ = -1;
     bool hover_armed_ = false;
 
     std::unordered_map<std::wstring, Icon> icons_;

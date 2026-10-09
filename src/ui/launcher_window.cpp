@@ -177,6 +177,7 @@ void LauncherWindow::create_text_formats() {
     make(std::round(base * 0.86f), DWRITE_FONT_WEIGHT_NORMAL, &fmt_hint_);
     make(std::round(base * 1.15f), DWRITE_FONT_WEIGHT_SEMI_BOLD, &fmt_letter_);
     make(std::round(base * 0.86f), DWRITE_FONT_WEIGHT_NORMAL, &fmt_footer_);
+    make(std::round(base * 0.78f), DWRITE_FONT_WEIGHT_SEMI_BOLD, &fmt_key_);
     fmt_glyph_.Reset();
     dw->CreateTextFormat(L"Segoe MDL2 Assets", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
                          DWRITE_FONT_STRETCH_NORMAL, std::round(base * 1.3f), L"", &fmt_glyph_);
@@ -674,6 +675,11 @@ LRESULT LauncherWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
                 if (std::abs(screen.x - last_mouse_.x) + std::abs(screen.y - last_mouse_.y) < 4) return 0;
                 hover_armed_ = true;
             }
+            const int hint = hint_at(p.x, p.y);
+            if (hint != hover_hint_) {
+                hover_hint_ = hint;
+                render();
+            }
             const int row = row_at(p.x, p.y);
             if (row >= 0 && static_cast<size_t>(row) != selected_) {
                 selected_ = static_cast<size_t>(row);
@@ -681,6 +687,12 @@ LRESULT LauncherWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         }
+        case WM_SETCURSOR:
+            if (LOWORD(lp) == HTCLIENT && hover_hint_ >= 0) {
+                SetCursor(LoadCursorW(nullptr, IDC_HAND));
+                return TRUE;
+            }
+            break;
         case WM_LBUTTONDOWN: {
             const float x = static_cast<float>(GET_X_LPARAM(lp)) * 96.f / dpi_ - margin_;
             const float y = static_cast<float>(GET_Y_LPARAM(lp)) * 96.f / dpi_ - margin_;
@@ -688,6 +700,11 @@ LRESULT LauncherWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
         case WM_LBUTTONUP: {
+            if (const int hint = hint_at(GET_X_LPARAM(lp), GET_Y_LPARAM(lp)); hint >= 0) {
+                const FooterHint h = footer_.hints[static_cast<size_t>(hint)];  // the action may redraw the footer
+                run_hint(h);
+                return 0;
+            }
             const int row = row_at(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
             if (row >= 0) activate(static_cast<size_t>(row), mode_from_keyboard());
             return 0;
@@ -966,14 +983,53 @@ void LauncherWindow::refresh_footer() {
     if (visible()) render();
 }
 
+int LauncherWindow::hint_at(int x_px, int y_px) const {
+    const float x = static_cast<float>(x_px) * 96.f / dpi_;
+    const float y = static_cast<float>(y_px) * 96.f / dpi_;
+    for (size_t i = 0; i < hint_rects_.size() && i < footer_.hints.size(); ++i) {
+        const auto& r = hint_rects_[i];
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom && footer_.hints[i].action != FooterHint::Do::None)
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
+void LauncherWindow::run_hint(const FooterHint& hint) {
+    switch (hint.action) {
+        case FooterHint::Do::Activate:
+            if (selected_ < hits_.size()) activate(selected_, LaunchMode::Normal);
+            break;
+        case FooterHint::Do::Actions:
+            if (mode_ == Mode::Results) open_actions();
+            break;
+        case FooterHint::Do::Back:
+            on_key(VK_ESCAPE, false);
+            break;
+        case FooterHint::Do::Complete:
+            complete();
+            break;
+        case FooterHint::Do::Quick:
+            if (mode_ == Mode::Results && selected_ < hits_.size() && cb_.quick_action) {
+                const Item item = *hits_[selected_].item;
+                cb_.quick_action(item, hint.letter);
+            }
+            break;
+        case FooterHint::Do::None:
+            break;
+    }
+}
+
 void LauncherWindow::draw_footer(ID2D1DeviceContext* dc) {
     if (cb_.footer) {
         const Item* sel = selected_ < hits_.size() ? hits_[selected_].item : nullptr;
         footer_ = cb_.footer(sel, mode_ != Mode::Results ? &action_parent_ : nullptr);
-        if (mode_ == Mode::Input) footer_.right = loc(L"Enter save · Esc cancel", L"Enter kaydet · Esc iptal");
+        if (mode_ == Mode::Input)
+            footer_.hints = {{L"Enter", loc(L"Save", L"Kaydet"), FooterHint::Do::Activate},
+                             {L"Esc", loc(L"Cancel", L"İptal"), FooterHint::Do::Back}};
     }
+    hint_rects_.clear();
     IDWriteFactory* dw = renderer_.dwrite();
-    if (!dw || !fmt_footer_) return;
+    if (!dw || !fmt_footer_ || !fmt_key_) return;
     ComPtr<ID2D1SolidColorBrush> brush;
     dc->CreateSolidColorBrush(pal_.divider, &brush);
     if (!brush) return;
@@ -987,24 +1043,79 @@ void LauncherWindow::draw_footer(ID2D1DeviceContext* dc) {
                              brush.Get());
     dc->PopAxisAlignedClip();
 
-    const float pad = 16.f;
-    const float right_w = std::min(panel_w_ * 0.45f, 320.f);
-    ComPtr<IDWriteTextLayout> right, left;
-    if (!footer_.right.empty())
-        dw->CreateTextLayout(footer_.right.c_str(), static_cast<UINT32>(footer_.right.size()), fmt_footer_.Get(), right_w, footer_h_, &right);
-    if (right) right->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-    const float left_w = panel_w_ - 2 * pad - (right ? right_w + 12.f : 0.f);
-    if (!footer_.left.empty())
-        dw->CreateTextLayout(footer_.left.c_str(), static_cast<UINT32>(footer_.left.size()), fmt_footer_.Get(), std::max(10.f, left_w),
-                             footer_h_, &left);
-    brush->SetColor(pal_.text_secondary);
-    auto draw = [&](IDWriteTextLayout* tl, float x) {
-        DWRITE_TEXT_METRICS m{};
-        tl->GetMetrics(&m);
-        dc->DrawTextLayout(D2D1::Point2F(x, top + (footer_h_ - m.height) / 2.f), tl, brush.Get());
+    const float pad = 14.f;
+    const float mid = top + footer_h_ / 2.f;
+    auto layout_text = [&](const std::wstring& text, IDWriteTextFormat* format, float max_w) {
+        ComPtr<IDWriteTextLayout> tl;
+        if (!text.empty()) dw->CreateTextLayout(text.c_str(), static_cast<UINT32>(text.size()), format, max_w, footer_h_, &tl);
+        return tl;
     };
-    if (left) draw(left.Get(), x0 + pad);
-    if (right) draw(right.Get(), x0 + panel_w_ - pad - right_w);
+    auto width_of = [](IDWriteTextLayout* tl) {
+        DWRITE_TEXT_METRICS m{};
+        if (tl) tl->GetMetrics(&m);
+        return m.widthIncludingTrailingWhitespace;
+    };
+    auto height_of = [](IDWriteTextLayout* tl) {
+        DWRITE_TEXT_METRICS m{};
+        if (tl) tl->GetMetrics(&m);
+        return m.height;
+    };
+
+    // Key hints, right-aligned: [key] label   [key] label. The context text gets what is left,
+    // but at least 40% of the width; hints that do not fit are dropped from the end.
+    struct Chip {
+        ComPtr<IDWriteTextLayout> key, label;
+        float key_w = 0, label_w = 0, w = 0;
+    };
+    const float key_pad = 5.f, key_gap = 5.f, hint_gap = 14.f;
+    std::vector<Chip> chips;
+    float total = 0;
+    const float max_hints_w = panel_w_ * 0.6f - pad;
+    for (const auto& h : footer_.hints) {
+        Chip c;
+        c.key = layout_text(h.key, fmt_key_.Get(), 200.f);
+        c.label = layout_text(h.label, fmt_footer_.Get(), 200.f);
+        c.key_w = width_of(c.key.Get());
+        c.label_w = width_of(c.label.Get());
+        c.w = c.key_w + 2 * key_pad + (c.label ? key_gap + c.label_w : 0.f);
+        const float next = total + (chips.empty() ? 0.f : hint_gap) + c.w;
+        if (next > max_hints_w) break;
+        total = next;
+        chips.push_back(std::move(c));
+    }
+
+    float x = x0 + panel_w_ - pad - total;
+    const float key_h = std::round(s(18.f));
+    for (size_t i = 0; i < chips.size(); ++i) {
+        const Chip& c = chips[i];
+        const D2D1_RECT_F hit = D2D1::RectF(x - 4.f, top + 3.f, x + c.w + 4.f, top + footer_h_ - 3.f);
+        hint_rects_.push_back(hit);
+        if (static_cast<int>(i) == hover_hint_ && footer_.hints[i].action != FooterHint::Do::None) {
+            brush->SetColor(with_alpha(pal_.text, dark_ ? 0.08f : 0.06f));
+            dc->FillRoundedRectangle(D2D1::RoundedRect(hit, 6.f, 6.f), brush.Get());
+        }
+        // Keycap: a soft filled rounded rectangle with a hairline border.
+        const D2D1_RECT_F cap = D2D1::RectF(x, mid - key_h / 2.f, x + c.key_w + 2 * key_pad, mid + key_h / 2.f);
+        brush->SetColor(with_alpha(pal_.text, dark_ ? 0.10f : 0.07f));
+        dc->FillRoundedRectangle(D2D1::RoundedRect(cap, 4.f, 4.f), brush.Get());
+        brush->SetColor(with_alpha(pal_.text, dark_ ? 0.14f : 0.12f));
+        dc->DrawRoundedRectangle(D2D1::RoundedRect(cap, 4.f, 4.f), brush.Get(), 1.f);
+        brush->SetColor(pal_.text);
+        if (c.key) dc->DrawTextLayout(D2D1::Point2F(x + key_pad, mid - height_of(c.key.Get()) / 2.f), c.key.Get(), brush.Get());
+        if (c.label) {
+            brush->SetColor(pal_.text_secondary);
+            dc->DrawTextLayout(D2D1::Point2F(x + c.key_w + 2 * key_pad + key_gap, mid - height_of(c.label.Get()) / 2.f), c.label.Get(),
+                               brush.Get());
+        }
+        x += c.w + hint_gap;
+    }
+    if (hover_hint_ >= static_cast<int>(hint_rects_.size())) hover_hint_ = -1;
+
+    const float left_w = panel_w_ - 2 * pad - (chips.empty() ? 0.f : total + 16.f);
+    if (auto left = layout_text(footer_.left, fmt_footer_.Get(), std::max(10.f, left_w))) {
+        brush->SetColor(pal_.text_secondary);
+        dc->DrawTextLayout(D2D1::Point2F(x0 + pad, mid - height_of(left.Get()) / 2.f), left.Get(), brush.Get());
+    }
 }
 
 }  // namespace kamil

@@ -117,6 +117,7 @@ private:
     std::vector<Item> job_actions(const std::wstring& root) const;
     bool run_job_action(const Item& parent, const std::wstring& action);
     void update_job_timer();
+    void warm_projects();
     bool is_project(const std::wstring& root) const;
     std::string vs_choice() const;
     void run_command(const std::wstring& id);
@@ -173,6 +174,8 @@ private:
     std::thread file_scan_;
     std::atomic<bool> file_scan_cancel_{false};
     ULONGLONG files_scanned_at_ = 0;
+    std::thread warm_;  // pre-reads CMake presets and File API replies so Ctrl+K opens instantly
+    std::atomic<bool> warm_cancel_{false};
 
     LauncherWindow launcher_;
     Tray tray_;

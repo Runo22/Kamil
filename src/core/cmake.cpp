@@ -4,6 +4,7 @@
 #include <fstream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <sstream>
 #include <system_error>
@@ -339,9 +340,23 @@ bool write_codemodel_query(const fs::path& build_dir) {
     return fs::exists(file, ec);
 }
 
+namespace {
+
+// Parsed codemodels by build directory. A reply is immutable once written (CMake writes a new
+// index-<time>.json on every configure), so the newest index file name + its time identify it.
+struct CachedModel {
+    fs::path index;
+    fs::file_time_type time;
+    CodeModel model;
+};
+std::mutex g_codemodel_mutex;
+std::map<fs::path, CachedModel> g_codemodels;
+
+CodeModel parse_codemodel(const fs::path& reply, const fs::path& build_dir, const fs::path& index);
+
+}  // namespace
+
 CodeModel read_codemodel(const fs::path& build_dir) {
-    CodeModel cm;
-    install_ryml_error_handler();
     std::error_code ec;
     const fs::path reply = build_dir / ".cmake" / "api" / "v1" / "reply";
     fs::path index;
@@ -350,9 +365,27 @@ CodeModel read_codemodel(const fs::path& build_dir) {
         if (name.rfind(L"index-", 0) == 0 && name.size() > 11 && (index.empty() || name > index.filename().wstring())) index = it->path();
     }
     if (index.empty()) {
+        CodeModel cm;
         cm.error = loc("no File API reply (the project has not been configured yet)", "File API yanıtı yok (proje henüz configure edilmemiş)");
         return cm;
     }
+    const auto time = fs::last_write_time(index, ec);
+    {
+        std::lock_guard lock(g_codemodel_mutex);
+        auto it = g_codemodels.find(build_dir);
+        if (it != g_codemodels.end() && it->second.index == index && it->second.time == time) return it->second.model;
+    }
+    CodeModel cm = parse_codemodel(reply, build_dir, index);
+    std::lock_guard lock(g_codemodel_mutex);
+    g_codemodels[build_dir] = CachedModel{index, time, cm};
+    return cm;
+}
+
+namespace {
+
+CodeModel parse_codemodel(const fs::path& reply, const fs::path& build_dir, const fs::path& index) {
+    CodeModel cm;
+    install_ryml_error_handler();
     try {
         const std::string index_text = read_file(index);
         ryml::Tree idx = ryml::parse_json_in_arena(ryml::csubstr(index_text.data(), index_text.size()));
@@ -406,6 +439,8 @@ CodeModel read_codemodel(const fs::path& build_dir) {
     }
     return cm;
 }
+
+}  // namespace
 
 // ---------------------------------------------------------------------------------------------
 // Build log

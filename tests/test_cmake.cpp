@@ -116,6 +116,13 @@ TEST(cmake_file_api_and_active_preset) {
     CHECK(cm.targets[0].artifacts[0] == (debug / "app" / "SensorUI.exe").lexically_normal().make_preferred());
     CHECK(!read_codemodel(release).valid);
 
+    // Cached until CMake writes a new reply (a new index file).
+    write(reply / "target-SensorUI.json", R"({ "name": "SensorUI", "type": "EXECUTABLE", "artifacts": [ { "path": "bin/Renamed.exe" } ] })");
+    CHECK(read_codemodel(debug).targets[0].artifacts[0] == cm.targets[0].artifacts[0]);
+    write(reply / "index-2026-10-07T11-00-00-0000.json",
+          R"({ "objects": [ { "kind": "codemodel", "version": { "major": 2, "minor": 7 }, "jsonFile": "codemodel-v2-abc.json" } ] })");
+    CHECK(read_codemodel(debug).targets[0].artifacts[0] == (debug / "bin" / "Renamed.exe").lexically_normal().make_preferred());
+
     CHECK(write_codemodel_query(release));
     CHECK(fs::exists(release / ".cmake" / "api" / "v1" / "query" / "client-kamil" / "codemodel-v2"));
 

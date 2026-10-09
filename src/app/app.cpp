@@ -179,6 +179,10 @@ int App::run(HINSTANCE instance, bool autostart) {
         file_scan_cancel_ = true;
         file_scan_.join();
     }
+    if (warm_.joinable()) {
+        warm_cancel_ = true;
+        warm_.join();
+    }
     vs_.reset();
     git_.reset();
     icon_loader_.reset();
@@ -566,10 +570,10 @@ std::vector<Item> App::actions_for(const Item& item) const {
             for (auto& a : list)
                 if (a.target != def) sorted.push_back(std::move(a));
             if (project) {
-                // Jobs to cancel, Debug, Build, Run, then the editors (VS / VS Code), then the rest.
+                // Jobs to cancel, Configure, Build, Debug, Run, then the editors (VS / VS Code), then the rest.
                 size_t head = 0;
                 while (head < project_list.size() && project_list[head].target.rfind(L"cancel-job:", 0) == 0) ++head;
-                head = std::min(project_list.size(), head + 3);
+                head = std::min(project_list.size(), head + 4);  // Configure, Build, Debug, Run
                 for (size_t i = 0; i < head; ++i) actions.push_back(std::move(project_list[i]));
                 for (auto& a : sorted)
                     if (a.target == L"vs" || a.target == L"code") actions.push_back(a);
@@ -718,64 +722,75 @@ std::wstring App::repo_context(const std::wstring& path) {
 }
 
 Footer App::footer_for(const Item* selected, const Item* parent) {
+    using Do = FooterHint::Do;
     Footer f;
-    // A running (or just finished) VS job is always shown first: "⚒ Build sürüyor… 0:12".
+    // A running (or just finished) VS job is always shown first: "⚒ Build x64-debug running… 0:12".
     const std::wstring job = job_status();
     auto with_job = [&](std::wstring context) {
         if (job.empty()) return context;
-        return context.empty() ? job : job + L"     " + context;
+        return context.empty() ? job : job + L"      " + context;
     };
     auto repo_line = [&](const Item& repo) {
         std::wstring line = repo_context(repo.path);
         if (is_project(repo.path)) {
             const std::wstring project = project_context(repo.path);
-            if (!project.empty()) line += (line.empty() ? L"" : L"   ") + project;
+            if (!project.empty()) line += (line.empty() ? L"" : L"     ") + project;
         }
         return line;
     };
+    const FooterHint more{L"Ctrl+K", loc(L"More", L"Diğer"), Do::Actions};
     if (parent) {
-        f.left = with_job(parent->kind == ItemKind::Repo ? parent->title + L"   " + repo_line(*parent) : parent->title);
-        f.right = loc(L"Enter select · Tab complete · Esc back", L"Enter seç · Tab tamamla · Esc geri");
+        f.left = with_job(parent->kind == ItemKind::Repo ? parent->title + L"     " + repo_line(*parent) : parent->title);
+        f.hints = {{L"Enter", parent->target == L"jobs" ? loc(L"Cancel job", L"İşi iptal et") : loc(L"Select", L"Seç"), Do::Activate},
+                   {L"Esc", loc(L"Back", L"Geri"), Do::Back}};
         return f;
     }
     if (!selected) {
         f.left = with_job({});
-        f.right = loc(L"Esc close", L"Esc kapat");
+        f.hints = {{L"Esc", loc(L"Close", L"Kapat"), Do::Back}};
         return f;
     }
     switch (selected->kind) {
         case ItemKind::Repo: {
             f.left = with_job(repo_line(*selected));
-            const std::wstring def = default_repo_action();
-            const std::wstring what = def == L"code" ? L"VS Code" : def == L"explorer" ? loc(L"Explorer", L"Gezgin") : def == L"terminal" ? L"Terminal"
-                                                                                                                                    : L"Visual Studio";
-            f.right = is_project(selected->path) ? std::wstring(loc(L"Alt+D debug · Alt+B build · Alt+R run · Ctrl+K", L"Alt+D debug · Alt+B build · Alt+R çalıştır · Ctrl+K"))
-                                                 : fmt(loc(L"Enter {} · Ctrl+K actions · Tab", L"Enter {} · Ctrl+K eylemler · Tab"), what);
+            if (is_project(selected->path)) {
+                f.hints = {{L"Alt+C", L"Configure", Do::Quick, L'C'},
+                           {L"Alt+B", L"Build", Do::Quick, L'B'},
+                           {L"Alt+D", L"Debug", Do::Quick, L'D'},
+                           more};
+            } else {
+                const std::wstring def = default_repo_action();
+                const std::wstring what = def == L"code"       ? std::wstring(L"VS Code")
+                                          : def == L"explorer" ? std::wstring(loc(L"Explorer", L"Gezgin"))
+                                          : def == L"terminal" ? std::wstring(L"Terminal")
+                                                               : std::wstring(L"Visual Studio");
+                f.hints = {{L"Enter", what, Do::Activate}, more};
+            }
             break;
         }
         case ItemKind::Command:
             f.left = with_job(selected->subtitle);
-            f.right = loc(L"Enter run", L"Enter çalıştır");
+            f.hints = {{L"Enter", loc(L"Run", L"Çalıştır"), Do::Activate}};
             break;
         case ItemKind::File: {
             f.left = with_job(selected->subtitle);
             std::wstring ext = std::filesystem::path(selected->path).extension().wstring();
             for (auto& c : ext) c = static_cast<wchar_t>(towlower(c));
-            if (is_script_extension(ext))
-                f.right = store_.current()->get_string(keys::kScriptAction) == "edit"
-                              ? loc(L"Enter edit · Alt+R run · Ctrl+K", L"Enter düzenle · Alt+R çalıştır · Ctrl+K")
-                              : loc(L"Enter run · Alt+E edit · Ctrl+K", L"Enter çalıştır · Alt+E düzenle · Ctrl+K");
+            if (!is_script_extension(ext))
+                f.hints = {{L"Enter", loc(L"Open", L"Aç"), Do::Activate}, {L"Alt+E", loc(L"Edit", L"Düzenle"), Do::Quick, L'E'}, more};
+            else if (store_.current()->get_string(keys::kScriptAction) == "edit")
+                f.hints = {{L"Enter", loc(L"Edit", L"Düzenle"), Do::Activate}, {L"Alt+R", loc(L"Run", L"Çalıştır"), Do::Quick, L'R'}, more};
             else
-                f.right = loc(L"Enter open · Alt+E edit · Ctrl+K", L"Enter aç · Alt+E düzenle · Ctrl+K");
+                f.hints = {{L"Enter", loc(L"Run", L"Çalıştır"), Do::Activate}, {L"Alt+E", loc(L"Edit", L"Düzenle"), Do::Quick, L'E'}, more};
             break;
         }
         case ItemKind::Folder:
             f.left = with_job(selected->subtitle);
-            f.right = loc(L"Enter Explorer · Ctrl+K actions", L"Enter Gezgin · Ctrl+K eylemler");
+            f.hints = {{L"Enter", loc(L"Explorer", L"Gezgin"), Do::Activate}, more};
             break;
         default:
             f.left = with_job(selected->path);
-            f.right = loc(L"Enter open · Ctrl+K actions · Tab", L"Enter aç · Ctrl+K eylemler · Tab");
+            f.hints = {{L"Enter", loc(L"Open", L"Aç"), Do::Activate}, more};
             break;
     }
     return f;
@@ -903,7 +918,8 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_KAMIL_REPOS_READY: {
             std::unique_ptr<std::vector<RepoInfo>> repos(reinterpret_cast<std::vector<RepoInfo>*>(lp));
             repos_ = std::move(*repos);
-            rebuild_items();  // safe in the action panel too: it owns copies of what it shows
+            rebuild_items();
+            warm_projects();  // safe in the action panel too: it owns copies of what it shows
             return 0;
         }
         case WM_KAMIL_GIT_STATUS: {

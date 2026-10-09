@@ -171,6 +171,33 @@ const ProjectView& App::project_view(const std::wstring& root, bool fresh) {
     return projects_[root] = std::move(v);
 }
 
+void App::warm_projects() {
+    std::vector<std::wstring> roots;
+    for (const auto& r : repos_)
+        if (r.cmake) roots.push_back(r.path);
+    if (warm_.joinable()) {
+        warm_cancel_ = true;
+        warm_.join();
+    }
+    warm_cancel_ = false;
+    if (roots.empty()) return;
+    warm_ = std::thread([this, roots = std::move(roots)] {
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+        const ULONGLONG start = GetTickCount64();
+        size_t models = 0;
+        for (const auto& root : roots) {
+            PresetsResult presets = load_cmake_presets(root, env_lookup);
+            if (presets.presets.empty()) presets.presets = build_dirs_as_presets(root);
+            for (const auto& p : presets.presets) {
+                if (warm_cancel_) return;
+                models += read_codemodel(p.binary_dir).valid;  // fills the codemodel cache
+            }
+        }
+        log_line("[projects] warmed " + std::to_string(roots.size()) + " projects, " + std::to_string(models) + " codemodels in " +
+                 std::to_string(GetTickCount64() - start) + " ms");
+    });
+}
+
 std::wstring App::job_title(const Job& job) const {
     std::wstring title = vs_job_verb(job.kind);
     if (!job.label.empty()) title += L" " + job.label;
@@ -186,7 +213,7 @@ std::wstring App::job_status() const {
         wchar_t clock[16];
         swprintf(clock, 16, L"%llu:%02llu", s / 60, s % 60);
         std::wstring out = L"⚒ " + (j.text.empty() ? job_title(j) : j.text) + L"  " + clock;
-        if (jobs_.size() > 1) out += fmt(loc(L"  · +{} queued", L"  · +{} sırada"), std::to_wstring(jobs_.size() - 1));
+        if (jobs_.size() > 1) out += fmt(loc(L"   +{} queued", L"   +{} sırada"), std::to_wstring(jobs_.size() - 1));
         return out;
     }
     if (!jobs_.empty()) return fmt(loc(L"⚒ {} queued", L"⚒ {} işi sırada"), std::to_wstring(jobs_.size()));
@@ -201,7 +228,7 @@ std::wstring App::project_context(const std::wstring& root) {
     const ProjectView& v = project_view(root);
     std::wstring out;
     if (v.active()) out += L"⚙ " + v.preset_name();
-    if (!v.executables.empty()) out += L" · " + v.target_name();
+    if (!v.executables.empty()) out += L"   ◎ " + v.target_name();
     if (!v.com.empty()) out += L"   ⇄ " + v.com;
     return out;
 }
@@ -221,7 +248,7 @@ std::vector<Item> App::job_actions(const std::wstring& root) const {
             const ULONGLONG s = (now - j.started) / 1000;
             wchar_t clock[16];
             swprintf(clock, 16, L"%llu:%02llu", s / 60, s % 60);
-            sub = fmt(loc(L"Running {}", L"Sürüyor {}"), clock) + (j.text.empty() ? std::wstring() : L" · " + j.text);
+            sub = fmt(loc(L"Running {}", L"Sürüyor {}"), clock) + (j.text.empty() ? std::wstring() : L"     " + j.text);
         } else {
             sub = loc(L"Queued: starts when the job before it finishes", L"Sırada: önceki iş bitince başlar");
         }
@@ -302,22 +329,34 @@ std::vector<Item> App::project_actions(const Item& repo) {
     const std::wstring preset = v.preset_name();
     const std::wstring target = v.target_name();
     const std::wstring problem = v.problem.empty() ? std::wstring() : L"⚠ " + v.problem;
-    const std::wstring args = v.args.empty() ? std::wstring() : L"   " + v.args;
-    const std::wstring at_preset = preset.empty() ? std::wstring() : L" · " + preset;
+    // Subtitles: "<preset>     <what happens>     <arguments>", separated by space, not by dots.
+    auto sub = [&](std::initializer_list<std::wstring> parts) {
+        std::wstring out;
+        for (const auto& p : parts) {
+            if (p.empty()) continue;
+            if (!out.empty()) out += L"     ";
+            out += p;
+        }
+        return out;
+    };
 
-    list.push_back(make_action(L"proj-debug", L"Debug  " + target + at_preset, devenv, kGlyphPlay,
+    list.push_back(make_action(L"proj-configure", L"Configure", {}, kGlyphRefresh,
+                               sub({preset, fmt(loc(L"CMake configure in {}", L"{}'da CMake configure"), vs_label)})));
+    list.push_back(make_action(L"proj-build", L"Build", devenv, kGlyphPlay, sub({preset, vs_label + L" Build All"})));
+    list.push_back(make_action(L"proj-debug", L"Debug " + target, devenv, kGlyphPlay,
                                !problem.empty() ? problem
-                                                : (store_.current()->get_bool(keys::kBuildBeforeDebug)
-                                                       ? fmt(loc(L"build in {} → start → attach", L"{}'da derle → başlat → bağlan"), vs_label)
-                                                       : fmt(loc(L"start → attach {}", L"başlat → {} bağlan"), vs_label)) +
-                                                      args));
-    list.push_back(make_action(L"proj-build", L"Build  " + preset, devenv, kGlyphPlay, vs_label + L" · Build All"));
-    list.push_back(make_action(L"proj-run", fmt(loc(L"Run  {}", L"Çalıştır  {}"), target + at_preset),
-                               file_exists(v.exe) ? v.exe.wstring() : std::wstring(), kGlyphPlay,
-                               !problem.empty() ? problem : (file_exists(v.exe) ? ago(v.exe) : std::wstring(loc(L"not built", L"derlenmemiş"))) + args));
+                                                : sub({preset,
+                                                       store_.current()->get_bool(keys::kBuildBeforeDebug)
+                                                           ? fmt(loc(L"build in {} → start → attach", L"{}'da derle → başlat → bağlan"), vs_label)
+                                                           : fmt(loc(L"start → attach {}", L"başlat → {} bağlan"), vs_label),
+                                                       v.args})));
+    list.push_back(make_action(L"proj-run", fmt(loc(L"Run {}", L"Çalıştır {}"), target), file_exists(v.exe) ? v.exe.wstring() : std::wstring(),
+                               kGlyphPlay,
+                               !problem.empty() ? problem
+                                                : sub({preset, file_exists(v.exe) ? ago(v.exe) : std::wstring(loc(L"not built", L"derlenmemiş")), v.args})));
     list.push_back(make_action(L"pick-preset", L"Preset: " + (preset.empty() ? L"—" : preset), {}, kGlyphPreset,
-                               fmt(v.preset_guessed ? loc(L"{} presets · the one configured last in VS", L"{} preset · VS'te son configure edilen")
-                                                    : loc(L"{} presets · selected", L"{} preset · seçili"),
+                               fmt(v.preset_guessed ? loc(L"{} presets, the one configured last in VS", L"{} preset, VS'te son configure edilen")
+                                                    : loc(L"{} presets, chosen in Kamil", L"{} preset, Kamil'de seçilen"),
                                    std::to_wstring(v.presets.size()))));
     if (v.executables.size() > 1)
         list.push_back(make_action(L"pick-target", fmt(loc(L"Target: {}", L"Hedef: {}"), target), {}, kGlyphTarget,
@@ -337,14 +376,13 @@ std::vector<Item> App::project_actions(const Item& repo) {
             if (t.type != "EXECUTABLE" || widen(t.name) != target) continue;
             const auto exe = first_exe(t);
             if (!file_exists(exe)) continue;
-            list.push_back(make_action(L"proj-run:" + widen(v.presets[i].name), fmt(loc(L"Run  {}", L"Çalıştır  {}"), target + L" · " + widen(v.presets[i].name)),
-                                       exe.wstring(), kGlyphPlay, ago(exe)));
+            list.push_back(make_action(L"proj-run:" + widen(v.presets[i].name), fmt(loc(L"Run {}", L"Çalıştır {}"), target), exe.wstring(), kGlyphPlay,
+                                       sub({widen(v.presets[i].name), ago(exe)})));
         }
     }
-    list.push_back(make_action(L"proj-rebuild", L"Rebuild  " + preset, devenv, kGlyphRefresh, vs_label + L" · Rebuild All"));
-    list.push_back(make_action(L"proj-configure", L"CMake configure", {}, kGlyphRefresh, vs_label + L" · Configure / Generate Cache"));
+    list.push_back(make_action(L"proj-rebuild", L"Rebuild", devenv, kGlyphRefresh, sub({preset, vs_label + L" Rebuild All"})));
     list.push_back(make_action(L"proj-reconfigure", loc(L"Delete cache and reconfigure", L"Önbelleği sil ve yeniden yapılandır"), {}, kGlyphRefresh,
-                               vs_label + L" · Delete Cache and Reconfigure"));
+                               sub({preset, vs_label + L" Delete Cache and Reconfigure"})));
     return list;
 }
 
@@ -362,6 +400,7 @@ bool App::quick_action(const Item& item, wchar_t key) {
     }
     if (item.kind != ItemKind::Repo || !is_project(item.path)) return false;
     switch (key) {
+        case L'C': return run_project_action(item, L"proj-configure");
         case L'D': return run_project_action(item, L"proj-debug");
         case L'B': return run_project_action(item, L"proj-build");
         case L'R': return run_project_action(item, L"proj-run");
@@ -621,6 +660,7 @@ void App::on_vs_event(const VsEvent& e) {
     }
     last_job_ = LastJob{e.text, GetTickCount64(), e.ok};
     invalidate_project(root);
+    if (e.kind == VsJob::Kind::Configure || e.kind == VsJob::Kind::Reconfigure) warm_projects();
     update_job_timer();
     // A queued job cancelled from the list needs no balloon: the list already shows it.
     if (!e.cancelled || was_running) {
