@@ -1,6 +1,6 @@
 # Kamil — Windows için Offline, Geliştirici Odaklı Başlatıcı
 
-> Durum: **Taslak v0.9** · Uygulama: **Faz 0 + git + Faz 1 + dosya/script araması kodlandı** (bkz. README) · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
+> Durum: **Taslak v1.0** · Uygulama: **Faz 0 + git + Faz 1 + dosya/script araması kodlandı** (bkz. README) · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
 
 Alfred'in iş akışını Windows'a, internetsiz bir iş bilgisayarına taşıyan; uygulama/dosya/klasör/LAN
 kaynaklarını anında bulan; script'leri, özel komutları, süreçleri ve CMake projelerinin
@@ -764,26 +764,76 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 
 ---
 
-## 11. Yol Haritası (önceliğe göre yeniden sıralandı)
+## 11. Yol Haritası (v1.0 — 2026-10-09)
 
-| Faz | Kapsam | Çıktı |
+### 11.1 Bugüne kadar yapılanlar
+
+| Alan | Durum |
+|---|---|
+| Başlatıcı: tray, `Alt+Space`, D2D pencere, tema/vurgu, DPI, ikonlar (halo düzeltmesi dahil) | ✓ |
+| Arama: Türkçe katlamalı bulanık eşleştirme, öğrenme (frecency + sorgu→seçim), takma adlar, klasör önceliği | ✓ |
+| Ayar altyapısı: şema, YAML doğrulama + satır numaralı hata, canlı yeniden yükleme, JSON Schema | ✓ |
+| Uygulamalar (Başlat Menüsü + UWP), dosya/klasör indeksi (`search.folders`), script çalıştır/düzenle | ✓ |
+| Git: depo keşfi, dal, değişiklik/ahead-behind, depo eylemleri | ✓ |
+| CMake + VS: preset/hedef/argüman/COM seçimi, VS'te build/configure (DTE), debug (başlat+bağlan), çalıştır | ✓ (gerçek VS'te doğrulanacak) |
+| Eylem paneli, `Tab` tamamlama, alt bilgi çubuğu, iş durumu | ✓ |
+
+### 11.2 Sıradaki fazlar
+
+Öncelik sırası; her satırda **neden** ve kabaca **iş büyüklüğü** (K küçük, O orta, B büyük).
+
+**Faz A — Sağlamlaştırma (önce bu: kod henüz gerçek kullanımda doğrulanmadı)**
+
+| İş | Neden | Büyüklük |
 |---|---|---|
-| **0 – İskelet** | Tray, `Alt+Space`, D2D pencere (Win10 düz + yuvarlak köşe, Win11 Acrylic), uygulama sağlayıcı, bulanık eşleştirme, başlatma, **ayar altyapısının çekirdeği** (şema, YAML okuma/doğrulama, canlı yeniden yükleme) | Kullanılabilir mini başlatıcı |
-| **1 – Git + Build / Debug (öncelik)** | ✓ git depo keşfi, dal/durum, depo eylemleri, eylem paneli, `Tab` tamamlama, alt bilgi çubuğu · ✓ preset/hedef/COM/argüman seçimi, VS Build/Rebuild/Configure (DTE), debug (başlat+bağlan), çalıştır, iş durumu alt bilgide · kalan: Konsol penceresi, IDE içi F5 modu · vswhere + varsayılan VS, DTE köprüsü (örnek bulma, build/configure tetikleme, bitiş izleme, Output'tan hata listesi), CMakePresets + File API, proje keşfi, plan modeli + son plan hafızası, Konsol penceresi (çalıştırma sekmeleri), preset başına çalıştırma, Debug (VS'te derle + başlat + bağlan, IDE içi F5, DebugExe), COM port servisi + çoklu örnekte port atama | Günlük build/debug kullanımı |
-| **2 – Ayarlar & Özel komutlar** | Ayarlar penceresi (şemadan üretilen form, arama, katman gösterimi, yorum koruyarak yazma, yedek), özel komutlar + parametre soruları + zincirler, script klasörleri, global öğe kısayolları, hariç tutma düzenleyici | Kodsuz yapılandırma |
-| **3 – Arama genişlemesi** (✓ kısmen: `search.folders` için kompakt dosya indeksi, script çalıştır/düzenle, uzantıya göre paylaşılan ikonlar) | Dosya indeksi + mmap önbellek + watcher, ikon önbelleği, sık kullanılanlar/LAN/şablonlu bağlantılar, Everything (opsiyonel), tam eylem paneli | Alfred eşdeğeri arama |
-| **4 – Akıllanma & araçlar** | Öğrenme/tahmin, kill/lock/port/err/hesap, KamilIndexer (MFT/USN), Alfred eklentileri, tema dosyaları | Tam sürüm |
+| Günlük dosyası (`logs\kamil.log`) + çökme dökümü (minidump) + "Kamil: Tanılama" | Sorun çıktığında tahmin yerine kayıtla düzeltmek için | K |
+| Gerçek kullanım geri bildirimleri: VS köprüsü (komut adları, build bitişi, attach), ikonlar, odak/kısayol | Faz 1 hiçbir gerçek VS'e karşı denenmedi | O |
+| Dosya indeksinde canlı güncelleme (`ReadDirectoryChangesW`) + diske önbellek | Yeni script'in anında görünmesi, açılışta tam tarama beklememek | O |
+| Performans ölçümü (`kamil-bench`): tuş başı gecikme p50/p99, açılış süresi | "Hızlı olması kritik" hedefini sayıyla korumak | K |
 
-Not: Faz 1 için gereken minimal ayarlar (proje kökleri, varsayılan VS) başlangıçta `settings.yaml`'dan
-okunur; Faz 2'de Ayarlar penceresine taşınır.
+**Faz B — Günlük iş akışı (ilk istekte olan ama henüz olmayanlar)**
 
-Her fazda `kamil-bench` ile performans hedefleri (§1) ölçülür; gerileme CI'da yakalanır.
+| İş | Neden | Büyüklük |
+|---|---|---|
+| Ayarlar penceresi (şemadan üretilen form, arama, hata gösterimi, yorum koruyarak yazma) | "Kesinlikle lazım" denmişti; YAML'i elle düzenleme zorunluluğunu kaldırır | B |
+| Özel komutlar (parametreli, `{com}`/`{clip}`… yer tutucular, zincir, onay) | "Custom command desteği olmalı" | O |
+| Öğe başına global kısayollar (script, komut, klasör, plan eylemi: ör. `Ctrl+Alt+F5` = Debug) | İlk istek: "global erişimi olan scriptler" | K |
+| LAN / intranet: yer imleri, UNC yolları, şablonlu URL'ler (`bug 1234`), erişilebilirlik testi (SMB donmasını önler) | İlk istek: "offline olsa bile LAN üzerinden klasör ve web siteleri" | O |
+
+**Faz C — Geliştirici araçları**
+
+| İş | Neden | Büyüklük |
+|---|---|---|
+| Konsol penceresi: çalıştırma/build çıktıları sekmelerde, hata listesi → satıra git (VS / VS Code) | Farklı preset'leri "ayrı ayrı göster" isteğinin tam karşılığı | B |
+| Süreç yönetimi: `kill`, `lock <dosya>` (LNK1168 çözümü), `port 8080` | İlk istek: "kill program"; build kilitlenmelerinde günlük ihtiyaç | O |
+| Hata kodu (`err 0x80070005`), hex/bin hesap (`= 0x1F<<3`) | C++ geliştirmede sık; küçük iş | K |
+| VS: IDE içi F5 modu (`launch.vs.json`), preset değiştirme (bulunabilirse) | Gerçek kullanım geri bildirimine göre | O |
+
+**Faz D — İsteğe bağlı (ihtiyaç doğarsa)**
+
+| İş | Ne zaman değer |
+|---|---|
+| Everything köprüsü (tüm disk araması) | Everything kurulursa; şu an kurulu değil |
+| Python venv keşfi, `py` komutu | Python script'leri çoğalırsa |
+| Saat/sıra tabanlı tahmin ("muhtemelen şimdi") | Mevcut öğrenme yetersiz kalırsa |
+| Windows 11 Acrylic | Windows 11'e geçilirse |
+| Alfred uyumlu Script Filter eklentileri | Alfred'deki workflow'lar taşınmak istenirse |
+
+### 11.3 Bilinçli olarak yapılmayacaklar
+
+| Konu | Neden |
+|---|---|
+| Müzik, web araması, bulut senkronu, telemetri, otomatik güncelleme | Offline iş bilgisayarı; istenmedi |
+| MFT/USN için yönetici yetkili yardımcı servis | Kapsamlı klasör indeksi yeterince hızlı; yönetici servisi güvenlik/kurulum yükü getirir |
+| Pano geçmişi, snippet yöneticisi | Windows'ta `Win+V` var; odak dışı |
+| Kurulum sihirbazı / MSI | Tek taşınabilir exe yeterli |
+| Kamil'in kendisinin derlemesi | Karar: derlemeyi VS yapar, Kamil tetikler |
+| Eklenti pazarı, tema mağazası, yapay zekâ entegrasyonu | Offline ortam ve sadelik hedefiyle çelişir |
 
 ---
 
 ## 12. Kalan Açık Sorular
 
-1. Aynı anda birden çok örnek çalıştırırken varsayılan davranış (§7.5: her örneğe ayrı port, yetmezse sırayla)
-   uygun mu?
-2. `tools\vs-probe.ps1` çıktısı (iş bilgisayarında, proje VS'te açıkken): Open Folder'da hangi CMake
-   komutlarının DTE'den çağrılabildiğini ve build olaylarının gelip gelmediğini kesinleştirir.
+1. Gerçek kullanımda VS köprüsü: "Kamil: VS bağlantısını test et" raporu, Debug/Build ilk deneme sonuçları.
+2. Aynı anda birden çok örnek çalıştırırken COM port davranışı (§7.5) uygun mu?
+3. Faz B'nin sırası: Ayarlar penceresi mi, özel komutlar + kısayollar mı önce?
