@@ -4,6 +4,7 @@
 #include <shlobj.h>
 
 #include "core/text.h"
+#include "core/i18n.h"
 
 namespace kamil {
 
@@ -11,7 +12,7 @@ std::wstring win32_error_message(DWORD error) {
     wchar_t* buf = nullptr;
     const DWORD n = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                                    nullptr, error, 0, reinterpret_cast<wchar_t*>(&buf), 0, nullptr);
-    std::wstring msg = n ? std::wstring(trim(std::wstring_view(buf, n))) : L"Hata " + std::to_wstring(error);
+    std::wstring msg = n ? std::wstring(trim(std::wstring_view(buf, n))) : loc(L"Error ", L"Hata ") + std::to_wstring(error);
     LocalFree(buf);
     return msg;
 }
@@ -75,7 +76,7 @@ std::wstring shell_execute(const std::wstring& file, const wchar_t* verb, const 
 
 std::wstring reveal_in_explorer(const std::wstring& path) {
     PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str());
-    if (!pidl) return L"Konum bulunamadı: " + path;
+    if (!pidl) return loc(L"Location not found: ", L"Konum bulunamadı: ") + path;
     const HRESULT hr = SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
     ILFree(pidl);
     return SUCCEEDED(hr) ? std::wstring{} : win32_error_message(static_cast<DWORD>(hr));
@@ -86,7 +87,7 @@ std::wstring reveal_in_explorer(const std::wstring& path) {
 std::wstring launch_item(const Item& item, LaunchMode mode) {
     switch (mode) {
         case LaunchMode::OpenLocation:
-            if (item.path.empty()) return L"Bu öğenin dosya konumu bilinmiyor.";
+            if (item.path.empty()) return loc(L"The file location of this item is unknown.", L"Bu öğenin dosya konumu bilinmiyor.");
             return reveal_in_explorer(item.path);
         case LaunchMode::Admin:
             return shell_execute(item.path.empty() ? item.target : item.path, L"runas");
@@ -97,7 +98,7 @@ std::wstring launch_item(const Item& item, LaunchMode mode) {
 }
 
 std::wstring run_program(const std::wstring& exe, const std::wstring& args, const std::wstring& dir, bool admin, const wchar_t* verb) {
-    if (exe.empty()) return L"Program bulunamadı.";
+    if (exe.empty()) return loc(L"Program not found.", L"Program bulunamadı.");
     return shell_execute(exe, verb ? verb : admin ? L"runas" : nullptr, args, dir);
 }
 

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <unordered_map>
 
 #include "core/fuzzy.h"
@@ -11,6 +12,7 @@ namespace kamil {
 namespace {
 
 constexpr int kAliasBoost = 100'000;
+constexpr int kKeywordPenalty = 20;
 
 }  // namespace
 
@@ -72,8 +74,11 @@ std::vector<Hit> search(std::span<const Item> items, std::wstring_view query, co
     const std::wstring& folded_query = matcher.folded_query();
 
     for (const auto& item : items) {
-        if ((item.mask & qmask) != qmask) continue;
-        auto score = matcher.match(item.title, item.title_folded);
+        std::optional<int> score;
+        if ((item.mask & qmask) == qmask) score = matcher.match(item.title, item.title_folded);
+        // Keywords match a little weaker than the title itself.
+        if (!score && !item.keywords_folded.empty() && (item.keywords_mask & qmask) == qmask)
+            if (auto k = matcher.match(item.keywords, item.keywords_folded)) score = *k - kKeywordPenalty;
         if (!score) continue;
         int total = *score;
         if (opt.learning)

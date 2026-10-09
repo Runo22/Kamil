@@ -10,6 +10,7 @@
 #include <sstream>
 #include <unordered_set>
 
+#include "core/i18n.h"
 #include "core/text.h"
 
 namespace kamil {
@@ -34,7 +35,7 @@ Item make_item(std::wstring title, std::wstring parsing, std::wstring path) {
     it.title = std::move(title);
     it.target = L"shell:AppsFolder\\" + parsing;
     it.path = std::move(path);
-    it.subtitle = it.path.empty() ? L"Uygulama" : it.path;
+    it.subtitle = it.path.empty() ? std::wstring(loc(L"Application", L"Uygulama")) : it.path;
     it.prepare();
     return it;
 }

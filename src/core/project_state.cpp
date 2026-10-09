@@ -52,7 +52,7 @@ bool ProjectStateStore::load(const std::filesystem::path& file) {
 
 bool ProjectStateStore::save(const std::filesystem::path& file) const {
     std::ostringstream out;
-    out << "# Kamil proje seçimleri (otomatik): kök \\t preset \\t hedef \\t argümanlar \\t COM \\t donanım kimliği\n";
+    out << "# Kamil project choices (automatic): root \\t preset \\t target \\t arguments \\t COM \\t hardware id\n";
     for (const auto& [root, c] : map_)
         out << clean(narrow(root)) << '\t' << clean(c.preset) << '\t' << clean(c.target) << '\t' << clean(c.args) << '\t'
             << clean(c.com_port) << '\t' << clean(c.com_hwid) << '\n';

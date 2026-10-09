@@ -2,6 +2,7 @@
 
 #include "core/fuzzy.h"
 #include "core/hotkey.h"
+#include "core/i18n.h"
 #include "core/line_edit.h"
 #include "core/search.h"
 #include "core/text.h"
@@ -272,4 +273,28 @@ TEST(icon_pixels_premultiply) {
     std::vector<uint32_t> legacy{0x00112233u};
     CHECK(normalize_icon_pixels(legacy));
     CHECK_EQ(legacy[0], 0xFF112233u);
+}
+
+TEST(format_placeholders) {
+    CHECK(fmt(L"{} could not be opened", L"Notepad") == L"Notepad could not be opened");
+    CHECK(fmt(L"{} / {} s", std::to_wstring(3), L"90") == L"3 / 90 s");
+    CHECK(fmt(L"{com} stays, {} is replaced", L"x") == L"{com} stays, x is replaced");
+    CHECK(fmt(L"missing {} {}", L"a") == L"missing a ");
+}
+
+TEST(search_keywords) {
+    std::vector<Item> items(2);
+    items[0].key = L"kamil:settings";
+    items[0].title = L"Kamil: Edit settings";
+    items[0].keywords = widen("Kamil: Ayarları düzenle");
+    items[1].key = L"app:Notepad";
+    items[1].title = L"Notepad";
+    for (auto& it : items) it.prepare();
+    UsageStore usage;
+    SearchOptions opt;
+    opt.now_unix = 1'800'000'000;
+    auto hits = search(items, L"ayarlar", usage, opt);  // the other language's title still finds it
+    CHECK(!hits.empty() && hits[0].item->key == L"kamil:settings");
+    hits = search(items, L"settings", usage, opt);
+    CHECK(!hits.empty() && hits[0].item->key == L"kamil:settings");
 }

@@ -20,6 +20,8 @@ inline constexpr wchar_t kGlyphSerial = 0x21C4;   // ⇄
 inline constexpr wchar_t kGlyphEdit = 0x270E;     // ✎
 inline constexpr wchar_t kGlyphRefresh = 0x21BB;  // ↻
 inline constexpr wchar_t kGlyphCheck = 0x2713;    // ✓
+inline constexpr wchar_t kGlyphCancel = 0xE711;   // MDL2 "Cancel"
+inline constexpr wchar_t kGlyphInfo = 0xE946;     // MDL2 "Info"
 
 // An entry of the action panel / a pick list. Entries with the same program share one icon
 // cache slot (the key is derived from the icon source).

@@ -70,7 +70,7 @@ struct BuildSummary {
     int errors = 0;
     int warnings = 0;
     bool ninja_failed = false;          // "FAILED:" lines
-    bool reported_success = false;      // "Build All succeeded" / "Derleme ... başarılı"
+    bool reported_success = false;      // "Build All succeeded"
     bool reported_failure = false;
     std::vector<BuildIssue> issues;     // first 50 errors, then warnings
 

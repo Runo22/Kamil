@@ -8,6 +8,7 @@ namespace kamil {
 const Schema& builtin_schema();
 
 namespace keys {
+inline constexpr const char* kLanguage = "general.language";
 inline constexpr const char* kHotkey = "general.hotkey";
 inline constexpr const char* kStartWithWindows = "general.start_with_windows";
 inline constexpr const char* kRememberQuery = "general.remember_last_query";
@@ -39,6 +40,7 @@ inline constexpr const char* kKeepConsole = "scripts.keep_console_open";
 inline constexpr const char* kPython = "scripts.python";
 
 inline constexpr const char* kDefaultVs = "dev.default_vs";
+inline constexpr const char* kDevenvPath = "dev.devenv_path";
 inline constexpr const char* kProjectRoots = "dev.project_roots";
 inline constexpr const char* kScanDepth = "dev.scan_depth";
 inline constexpr const char* kScanExclude = "dev.scan_exclude";
@@ -49,6 +51,7 @@ inline constexpr const char* kBuildBeforeDebug = "dev.build_before_debug";
 inline constexpr const char* kDefaultArgs = "dev.default_args";
 inline constexpr const char* kVsConfigureCommand = "dev.vs_configure_command";
 inline constexpr const char* kVsReconfigureCommand = "dev.vs_reconfigure_command";
+inline constexpr const char* kVsWaitSeconds = "dev.vs_wait_seconds";
 }  // namespace keys
 
 }  // namespace kamil

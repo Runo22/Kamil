@@ -15,7 +15,7 @@ struct Paths {
     std::filesystem::path usage_file() const { return config_dir / "usage.tsv"; }
     std::filesystem::path apps_cache_file() const { return cache_dir / "apps.tsv"; }
     std::filesystem::path projects_file() const { return config_dir / "projects.tsv"; }
-    std::filesystem::path vs_report_file() const { return cache_dir / "vs-baglanti-raporu.txt"; }
+    std::filesystem::path vs_report_file() const { return cache_dir / "vs-connection-report.txt"; }
 };
 
 // Portable mode: a "data" folder or a "portable.txt" file next to Kamil.exe.

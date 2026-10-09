@@ -130,7 +130,7 @@ bool UsageStore::load(const std::filesystem::path& path) {
 bool UsageStore::save(const std::filesystem::path& path) const {
     std::ostringstream out;
     out.imbue(std::locale::classic());
-    out << "# Kamil kullanım verisi (otomatik). Silinirse öğrenilenler sıfırlanır.\n";
+    out << "# Kamil usage data (automatic). Deleting it resets what Kamil has learned.\n";
     out.precision(6);
     for (const auto& [k, s] : frecency_) out << "F\t" << s.value << '\t' << s.last << '\t' << narrow(k) << '\n';
     for (const auto& [k, s] : affinity_) {

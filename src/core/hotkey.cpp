@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 
+#include "core/i18n.h"
 #include "core/text.h"
 
 namespace kamil {
@@ -89,30 +90,30 @@ std::optional<Hotkey> parse_hotkey(std::string_view text, std::string* error) {
         return std::nullopt;
     };
     text = trim(text);
-    if (text.empty()) return fail("kısayol boş");
+    if (text.empty()) return fail(loc("hotkey is empty", "kısayol boş"));
 
     const auto parts = split_plus(text);
     Hotkey hk;
     for (size_t i = 0; i < parts.size(); ++i) {
         const auto part = parts[i];
-        if (part.empty()) return fail("kısayolda boş parça var");
+        if (part.empty()) return fail(loc("hotkey has an empty part", "kısayolda boş parça var"));
         const bool last = i + 1 == parts.size();
         if (!last) {
             auto mod = mod_from_name(part);
-            if (!mod) return fail("bilinmeyen değiştirici tuş: '" + std::string(part) + "'");
+            if (!mod) return fail(std::string(loc("unknown modifier: '", "bilinmeyen değiştirici tuş: '")) + std::string(part) + "'");
             hk.mods |= *mod;
             continue;
         }
         if (auto mod = mod_from_name(part)) {
             (void)mod;
-            return fail("kısayol bir değiştirici ile bitemez: '" + std::string(part) + "'");
+            return fail(std::string(loc("a hotkey cannot end with a modifier: '", "kısayol bir değiştirici ile bitemez: '")) + std::string(part) + "'");
         }
         auto vk = key_from_name(part);
-        if (!vk) return fail("bilinmeyen tuş: '" + std::string(part) + "'");
+        if (!vk) return fail(std::string(loc("unknown key: '", "bilinmeyen tuş: '")) + std::string(part) + "'");
         hk.vk = *vk;
     }
     if (hk.mods == 0 && !(hk.vk >= 0x70 && hk.vk <= 0x87))
-        return fail("global kısayol en az bir değiştirici (Ctrl/Alt/Shift/Win) içermeli");
+        return fail(loc("a global hotkey needs at least one modifier (Ctrl/Alt/Shift/Win)", "global kısayol en az bir değiştirici (Ctrl/Alt/Shift/Win) içermeli"));
     return hk;
 }
 

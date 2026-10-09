@@ -81,8 +81,10 @@ struct SettingDef {
     std::string key;  // dotted path, e.g. "appearance.max_rows"; for ObjectList fields: field name
     Kind kind = Kind::String;
     Value def;
-    std::string title;
+    std::string title;           // English
     std::string description;
+    std::string title_tr;        // Turkish (empty: English is used)
+    std::string description_tr;
     int64_t min = INT64_MIN;  // Int, Duration (ms)
     int64_t max = INT64_MAX;
     std::vector<std::string> choices;  // Enum
@@ -98,13 +100,16 @@ public:
     const SettingDef* find(std::string_view key) const;
     const std::vector<SettingDef>& all() const { return defs_; }
     bool has_section(std::string_view prefix) const;  // true if some key starts with prefix + "."
-    void set_section_title(std::string section, std::string title);
+    void set_section_title(std::string section, std::string title_en, std::string title_tr = {});
     std::string_view section_title(std::string_view section) const;
 
 private:
     std::vector<SettingDef> defs_;
     std::unordered_map<std::string, size_t> index_;
-    std::vector<std::pair<std::string, std::string>> section_titles_;
+    struct SectionTitle {
+        std::string section, en, tr;
+    };
+    std::vector<SectionTitle> section_titles_;
 };
 
 struct Diagnostic {
@@ -166,6 +171,9 @@ std::string generate_json_schema(const Schema& schema);
 
 // Formatting helpers shared with the writer and tests.
 std::string format_duration(int64_t ms);
+// Title / description of a setting in the current UI language.
+const std::string& setting_title(const SettingDef& def);
+const std::string& setting_description(const SettingDef& def);
 bool parse_duration(std::string_view text, int64_t* ms);
 
 // Holds the current snapshot and notifies subscribers about changes. Readers never block:

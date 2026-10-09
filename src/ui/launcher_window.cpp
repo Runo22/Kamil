@@ -7,6 +7,7 @@
 #include <cmath>
 
 #include "core/fuzzy.h"
+#include "core/i18n.h"
 #include "core/text.h"
 #include "platform/system_theme.h"
 
@@ -385,7 +386,7 @@ void LauncherWindow::open_actions() {
     const Item parent = *hits_[selected_].item;
     std::vector<Item> actions = cb_.actions_for(parent);
     if (actions.empty()) return;
-    show_list(parent, std::move(actions), L"Eylem ara — " + parent.title);
+    show_list(parent, std::move(actions), fmt(loc(L"Search actions — {}", L"Eylem ara — {}"), parent.title));
 }
 
 void LauncherWindow::show_list(const Item& parent, std::vector<Item> items, std::wstring placeholder) {
@@ -410,7 +411,7 @@ void LauncherWindow::reopen_actions(const Item& parent) {
     if (!cb_.actions_for) return;
     std::vector<Item> actions = cb_.actions_for(parent);
     if (actions.empty()) return;
-    show_list(parent, std::move(actions), L"Eylem ara — " + parent.title);
+    show_list(parent, std::move(actions), fmt(loc(L"Search actions — {}", L"Eylem ara — {}"), parent.title));
 }
 
 void LauncherWindow::prompt(const Item& parent, std::wstring placeholder, std::wstring initial, std::wstring help,
@@ -424,7 +425,7 @@ void LauncherWindow::prompt(const Item& parent, std::wstring placeholder, std::w
     hint.kind = ItemKind::Action;
     hint.key = L"action:prompt";
     hint.target = L"prompt";
-    hint.title = L"Enter ile kaydet";
+    hint.title = loc(L"Press Enter to save", L"Enter ile kaydet");
     hint.subtitle = std::move(help);
     hint.glyph = 0x270E;  // ✎
     hint.prepare();
@@ -797,7 +798,7 @@ void LauncherWindow::render() {
     if (fmt_input_ && dw) {
         const std::wstring& text = edit_.text();
         const bool placeholder = text.empty();
-        const std::wstring hint = mode_ != Mode::Results ? placeholder_ : L"Uygulama, depo veya komut ara…";
+        const std::wstring hint = mode_ != Mode::Results ? placeholder_ : std::wstring(loc(L"Search apps, projects, files or commands…", L"Uygulama, proje, dosya veya komut ara…"));
         const std::wstring shown = placeholder ? hint : text;
         ComPtr<IDWriteTextLayout> tl;
         dw->CreateTextLayout(shown.c_str(), static_cast<UINT32>(shown.size()), fmt_input_.Get(), 10000.f, input_h_, &tl);
@@ -849,7 +850,7 @@ void LauncherWindow::render() {
     }
     const float list_top = y0 + input_h_ + 1.f + pad_;
     if (empty_notice && fmt_title_ && dw) {
-        const std::wstring msg = L"Sonuç yok";
+        const std::wstring msg = loc(L"No results", L"Sonuç yok");
         brush->SetColor(pal_.text_secondary);
         ComPtr<IDWriteTextLayout> tl;
         dw->CreateTextLayout(msg.c_str(), static_cast<UINT32>(msg.size()), fmt_title_.Get(), panel_w_, row_h_, &tl);
@@ -969,7 +970,7 @@ void LauncherWindow::draw_footer(ID2D1DeviceContext* dc) {
     if (cb_.footer) {
         const Item* sel = selected_ < hits_.size() ? hits_[selected_].item : nullptr;
         footer_ = cb_.footer(sel, mode_ != Mode::Results ? &action_parent_ : nullptr);
-        if (mode_ == Mode::Input) footer_.right = L"Enter kaydet · Esc iptal";
+        if (mode_ == Mode::Input) footer_.right = loc(L"Enter save · Esc cancel", L"Enter kaydet · Esc iptal");
     }
     IDWriteFactory* dw = renderer_.dwrite();
     if (!dw || !fmt_footer_) return;

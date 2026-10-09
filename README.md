@@ -1,7 +1,8 @@
 # Kamil
 
-Windows için offline, geliştirici odaklı, Alfred benzeri başlatıcı. `Alt+Space` ile açılır,
-yazdıkça Türkçe karakterleri tanıyan bulanık arama yapar ve seçimlerinden öğrenir.
+Windows için offline, geliştirici odaklı başlatıcı. `Alt+Space` ile açılır, yazdıkça Türkçe karakterleri
+tanıyan bulanık arama yapar ve seçimlerinden öğrenir. Arayüz **İngilizce ve Türkçe**; varsayılan olarak Windows'un
+görüntü dilini izler (`general.language: auto | en | tr`).
 
 Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 
@@ -27,8 +28,11 @@ Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 | Debug: VS'te derle → programı duraklatılmış başlat → VS debugger'ı bağla → devam | ✓ |
 | Çalıştır (ayrı konsol penceresinde), diğer preset'lerin build'lerini ayrı ayrı çalıştırma | ✓ |
 | COM port seçimi (dostu ad, VID/PID ile hatırlama), argüman şablonu `--port {com}` | ✓ |
+| İki dilli arayüz (İngilizce / Türkçe); dahili komutlar iki dilde de aranır (`settings` = `ayarlar`) | ✓ |
+| VS iş kuyruğu: **Kamil: VS jobs** listesi, iptal, sınırlı ve nedenli beklemeler, `kamil.log` | ✓ |
 | Konsol penceresi (çıktıları Kamil içinde sekmeli gösterme) | sıradaki |
-| Ayarlar penceresi, özel komutlar, dosya indeksi | Faz 2–3 |
+| Özel komutlar, öğe başına kısayollar, LAN yer imleri | Faz B |
+| Ayarlar penceresi | ertelendi (istenince) |
 | Windows 11 Acrylic arka plan | sonraki adım (şu an iki sistemde de düz yüzey) |
 
 ## Derleme (Visual Studio 2026)
@@ -63,8 +67,8 @@ Tek bir `Kamil.exe` üretilir (statik CRT, ek DLL gerekmez). VS2022 ile de derle
 | `Ctrl+C` | (metin seçili değilse) seçili öğenin yolunu kopyala |
 | `Esc` | Gizle |
 
-Boş pencerede en sık / son kullandıkların listelenir. `Kamil:` ile başlayan dahili komutlar da aranabilir:
-`ayar` → *Kamil: Ayarları düzenle*, `tara` → *Kamil: Uygulamaları yeniden tara*, `çıkış` …
+Boş pencerede en sık / son kullandıkların listelenir. `Kamil:` ile başlayan dahili komutlar da aranabilir, iki dilde de:
+`settings` / `ayar` → *Kamil: Edit settings*, `rescan` / `tara`, `jobs` / `iptal` → *Kamil: VS jobs*, `log`, `quit` …
 
 ## Dosyalar ve script'ler
 
@@ -110,6 +114,16 @@ konsolun iş bitince kapanmasını sağlar. Yeni dosyalar, pencereyi açtığın
 VS seçili klasörü açmamışsa Kamil `devenv "<klasör>"` ile açar ve CMake hazırlığını bekler. Open Folder modunda
 VS **kendi seçili preset'ini** derler; Kamil'deki preset farklıysa uyarır.
 
+**İş kuyruğu.** VS işleri sırayla çalışır. Alt bilgi çubuğu çalışan işi, ne beklediğini ("CMake hazırlanıyor",
+"VS başka build yapıyor", "VS açılıyor") ve `+N sırada` sayısını gösterir. **Kamil: VS jobs** (veya tray menüsü)
+çalışan ve sıradaki işleri listeler; Enter seçili işi iptal eder (çalışan build VS'te de durdurulur). Projenin
+`Ctrl+K` panelinde de o projenin işleri en üstte iptal edilebilir. Her bekleme `dev.vs_wait_seconds` (varsayılan
+90 sn) ile sınırlıdır; aynı iş ikinci kez sıraya alınmaz.
+
+**Sorun giderme.** Yönetici olarak açılmış bir VS'e normal Kamil erişemez (Windows kısıtı): Kamil bunu tespit edip
+söyler, VS'i normal açın ya da Kamil'i de yönetici olarak çalıştırın. Visual Studio bulunamazsa "Visual Studio'da aç"
+eylemi nedenini yazar; `dev.devenv_path` ile yolu verin. Her VS adımı `kamil.log`'a yazılır (**Kamil: Open log**).
+
 İlk kullanımda bir kez **Kamil: VS bağlantısını test et** komutunu çalıştırın: açık VS örneklerini, Output bölmelerini
 ve VS'teki CMake komutlarının adlarını içeren bir rapor açılır. Configure komutu otomatik bulunamazsa rapordaki adı
 `dev.vs_configure_command` ayarına yazın.
@@ -129,6 +143,7 @@ açarsanız `schema\settings.json` sayesinde otomatik tamamlama ve hata gösteri
 
 ```yaml
 general:
+  language: auto       # auto | en | tr
   hotkey: Alt+Space
 appearance:
   theme: auto          # auto | dark | light
@@ -137,6 +152,8 @@ search:
   exclude_apps: ['*uninstall*', '*kaldır*']
 dev:
   default_vs: vs2026
+  devenv_path: ''                         # boş: vswhere / standart kurulum klasörleri
+  vs_wait_seconds: 90                     # VS açılışı / CMake hazırlığı için en uzun bekleme
   project_roots: ['D:\src', 'D:\work']   # git depoları burada aranır
   repo_action: vs                         # depoda Enter: vs | code | explorer | terminal
   terminal: wt                            # wt | cmd | powershell | git-bash

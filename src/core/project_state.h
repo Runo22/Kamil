@@ -6,7 +6,7 @@
 
 namespace kamil {
 
-// The last choices per project, remembered across restarts ("son seçili plan").
+// The last choices per project, remembered across restarts.
 struct ProjectChoice {
     std::string preset;
     std::string target;

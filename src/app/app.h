@@ -63,6 +63,7 @@ public:
     int run(HINSTANCE instance, bool autostart);
 
 private:
+    struct Job;
     static LRESULT CALLBACK wndproc(HWND, UINT, WPARAM, LPARAM);
     LRESULT handle(UINT msg, WPARAM wp, LPARAM lp);
 
@@ -110,6 +111,12 @@ private:
     void on_vs_event(const VsEvent& e);
     const std::vector<ComPort>& com_ports();
     std::wstring job_status() const;
+    std::wstring job_title(const Job& job) const;
+    void show_jobs();
+    void cancel_job(uint64_t id);
+    std::vector<Item> job_actions(const std::wstring& root) const;
+    bool run_job_action(const Item& parent, const std::wstring& action);
+    void update_job_timer();
     bool is_project(const std::wstring& root) const;
     std::string vs_choice() const;
     void run_command(const std::wstring& id);
@@ -139,16 +146,24 @@ private:
     std::vector<ComPort> com_ports_;
     bool com_ports_stale_ = true;
     std::unique_ptr<VsBridge> vs_;
+    // Visual Studio jobs: queued and running, in submit order (the bridge runs them one by one).
     struct Job {
-        bool running = false;
+        uint64_t id = 0;
         VsJob::Kind kind = VsJob::Kind::Build;
-        std::wstring label;
-        std::wstring text;
+        std::wstring root;
+        std::wstring label;   // preset
+        std::wstring text;    // latest progress line
+        bool running = false;
+        bool cancelling = false;
+        ULONGLONG queued = 0;
         ULONGLONG started = 0;
+    };
+    std::vector<Job> jobs_;
+    struct LastJob {
+        std::wstring text;
         ULONGLONG finished = 0;
         bool ok = false;
-        std::wstring root;
-    } job_;
+    } last_job_;
     std::unordered_map<std::wstring, RepoState> repo_states_;
     Tools tools_;
     bool tools_ready_ = false;

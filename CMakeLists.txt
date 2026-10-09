@@ -38,6 +38,8 @@ add_library(kamil_core STATIC
     src/core/fuzzy.cpp
     src/core/git.cpp
     src/core/hotkey.cpp
+    src/core/i18n.cpp
+    src/core/log.cpp
     src/core/line_edit.cpp
     src/core/pixels.cpp
     src/core/project_state.cpp

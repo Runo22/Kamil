@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "platform/win.h"
+#include "core/i18n.h"
 
 namespace kamil {
 
@@ -78,11 +79,11 @@ public:
 
     // Calls a method or reads a property (both flags are passed, which DTE accepts).
     Variant invoke(const wchar_t* name, std::initializer_list<const Variant*> args = {}, WORD flags = DISPATCH_METHOD | DISPATCH_PROPERTYGET) const {
-        if (!p_) throw ComError{E_POINTER, std::wstring(name) + L": nesne yok"};
+        if (!p_) throw ComError{E_POINTER, std::wstring(name) + loc(L": no object", L": nesne yok")};
         DISPID id = 0;
         LPOLESTR n = const_cast<LPOLESTR>(name);
         HRESULT hr = p_->GetIDsOfNames(IID_NULL, &n, 1, LOCALE_USER_DEFAULT, &id);
-        if (FAILED(hr)) throw ComError{hr, std::wstring(name) + L": üye bulunamadı"};
+        if (FAILED(hr)) throw ComError{hr, std::wstring(name) + loc(L": member not found", L": üye bulunamadı")};
         // DISPPARAMS expects arguments in reverse order.
         VARIANT argv[8];
         UINT argc = 0;

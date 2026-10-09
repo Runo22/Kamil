@@ -13,6 +13,8 @@
 #include "../res/resource.h"
 #include "app/action_item.h"
 #include "core/hotkey.h"
+#include "core/i18n.h"
+#include "core/log.h"
 #include "core/settings_schema.h"
 #include "core/text.h"
 #include "platform/process.h"
@@ -37,24 +39,39 @@ enum MenuId : UINT {
     IDM_RELOAD,
     IDM_ISSUES,
     IDM_RESCAN,
+    IDM_JOBS,
+    IDM_CANCEL_JOBS,
+    IDM_LOG,
     IDM_EXIT,
 };
 
-// Built-in commands appear in the result list like any other item.
+// Built-in commands appear in the result list like any other item. Both languages' titles are
+// searchable keywords, so "settings" and "ayarlar" find the same command.
 struct BuiltinCommand {
     const wchar_t* id;
-    const wchar_t* title;
-    const wchar_t* subtitle;
+    const wchar_t* title_en;
+    const wchar_t* title_tr;
+    const wchar_t* sub_en;
+    const wchar_t* sub_tr;
 };
 
 constexpr BuiltinCommand kCommands[] = {
-    {L"settings", L"Kamil: Ayarları düzenle", L"settings.yaml dosyasını düzenleyicide açar"},
-    {L"config-dir", L"Kamil: Ayar klasörünü aç", L"Ayar, öğrenme ve önbellek dosyalarının bulunduğu klasör"},
-    {L"reload", L"Kamil: Ayarları yeniden yükle", L"settings.yaml dosyasını yeniden okur"},
-    {L"rescan", L"Kamil: Yeniden tara", L"Uygulamalar, git depoları ve aranacak klasörlerdeki dosyalar"},
-    {L"forget", L"Kamil: Öğrenilenleri sıfırla", L"Sık kullanılanlar ve arama tercihleri silinir"},
-    {L"vs-diagnose", L"Kamil: VS bağlantısını test et", L"Açık VS 2022/2026 örnekleri, Output bölmeleri ve CMake komut adları raporu"},
-    {L"quit", L"Kamil: Çıkış", L"Kamil'i kapatır (kısayol devre dışı kalır)"},
+    {L"settings", L"Kamil: Edit settings", L"Kamil: Ayarları düzenle", L"Opens settings.yaml in the editor", L"settings.yaml dosyasını düzenleyicide açar"},
+    {L"config-dir", L"Kamil: Open settings folder", L"Kamil: Ayar klasörünü aç", L"Settings, learning data and cache files",
+     L"Ayar, öğrenme ve önbellek dosyalarının bulunduğu klasör"},
+    {L"reload", L"Kamil: Reload settings", L"Kamil: Ayarları yeniden yükle", L"Reads settings.yaml again", L"settings.yaml dosyasını yeniden okur"},
+    {L"rescan", L"Kamil: Rescan", L"Kamil: Yeniden tara", L"Apps, git repositories and files in the search folders",
+     L"Uygulamalar, git depoları ve aranacak klasörlerdeki dosyalar"},
+    {L"jobs", L"Kamil: VS jobs", L"Kamil: VS işleri", L"Running and queued Visual Studio jobs; cancel them here",
+     L"Çalışan ve sırada bekleyen Visual Studio işleri; buradan iptal edilir"},
+    {L"forget", L"Kamil: Forget what was learned", L"Kamil: Öğrenilenleri sıfırla", L"Clears frequently used items and search preferences",
+     L"Sık kullanılanlar ve arama tercihleri silinir"},
+    {L"vs-diagnose", L"Kamil: Test VS connection", L"Kamil: VS bağlantısını test et",
+     L"Report: Visual Studio 2022/2026 instances, Output panes, CMake command names, administrator rights",
+     L"Rapor: açık VS 2022/2026 örnekleri, Output bölmeleri, CMake komut adları, yönetici hakları"},
+    {L"log", L"Kamil: Open log", L"Kamil: Günlüğü aç", L"kamil.log: what Kamil did, especially with Visual Studio",
+     L"kamil.log: Kamil'in yaptıkları, özellikle Visual Studio ile"},
+    {L"quit", L"Kamil: Quit", L"Kamil: Çıkış", L"Closes Kamil (the hotkey stops working)", L"Kamil'i kapatır (kısayol devre dışı kalır)"},
 };
 
 int64_t now_unix() {
@@ -90,6 +107,9 @@ App::~App() = default;
 int App::run(HINSTANCE instance, bool autostart) {
     instance_ = instance;
     paths_ = resolve_paths();
+    set_language(system_language());  // until settings.yaml is read; also the language of a new settings.yaml
+    log_open(paths_.cache_dir / "kamil.log");
+    log_line("---- Kamil started");
 
     INITCOMMONCONTROLSEX icc{sizeof(icc), ICC_STANDARD_CLASSES};
     InitCommonControlsEx(&icc);
@@ -125,7 +145,9 @@ int App::run(HINSTANCE instance, bool autostart) {
     cb.footer = [this](const Item* selected, const Item* parent) { return footer_for(selected, parent); };
     cb.quick_action = [this](const Item& item, wchar_t key) { return quick_action(item, key); };
     if (!launcher_.create(instance_, std::move(cb))) {
-        MessageBoxW(nullptr, L"Arama penceresi oluşturulamadı (Direct2D/DirectComposition).", L"Kamil", MB_ICONERROR);
+        MessageBoxW(nullptr, loc(L"The search window could not be created (Direct2D/DirectComposition).",
+                                 L"Arama penceresi oluşturulamadı (Direct2D/DirectComposition)."),
+                    L"Kamil", MB_ICONERROR);
         return 1;
     }
 
@@ -140,7 +162,8 @@ int App::run(HINSTANCE instance, bool autostart) {
     SetTimer(hwnd_, kTimerRescanApps, kRescanIntervalMs, nullptr);
 
     if (!autostart && hotkey_ok_)
-        notify(L"Kamil çalışıyor", L"Açmak için " + hotkey_display(hotkey_text_) + L" tuşlarına basın.", Tray::Balloon::Info);
+        notify(loc(L"Kamil is running", L"Kamil çalışıyor"),
+               fmt(loc(L"Press {} to open it.", L"Açmak için {} tuşlarına basın."), hotkey_display(hotkey_text_)), Tray::Balloon::Info);
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -218,13 +241,16 @@ void App::report(const LoadResult& r) {
     for (const auto& d : r.diagnostics) errors += d.severity == Diagnostic::Severity::Error;
     const Diagnostic& first = r.diagnostics.front();
     std::wstring text = widen(first.to_string());
-    if (r.diagnostics.size() > 1) text += L"\n(+" + std::to_wstring(r.diagnostics.size() - 1) + L" sorun daha)";
+    if (r.diagnostics.size() > 1) text += fmt(loc(L"\n(+{} more)", L"\n(+{} sorun daha)"), std::to_wstring(r.diagnostics.size() - 1));
+    for (const auto& d : r.diagnostics) log_line("[settings] " + d.to_string());
     if (r.parse_failed) {
-        notify(L"settings.yaml okunamadı", text + L"\nÖnceki ayarlar kullanılıyor.", Tray::Balloon::Error);
+        notify(loc(L"settings.yaml could not be read", L"settings.yaml okunamadı"),
+               text + loc(L"\nThe previous settings stay in use.", L"\nÖnceki ayarlar kullanılıyor."), Tray::Balloon::Error);
     } else if (errors) {
-        notify(L"Ayar hatası", text + L"\nHatalı değerler varsayılana döndü.", Tray::Balloon::Warning);
+        notify(loc(L"Settings error", L"Ayar hatası"), text + loc(L"\nInvalid values were reset to their defaults.", L"\nHatalı değerler varsayılana döndü."),
+               Tray::Balloon::Warning);
     } else {
-        notify(L"Ayar uyarısı", text, Tray::Balloon::Info);
+        notify(loc(L"Settings warning", L"Ayar uyarısı"), text, Tray::Balloon::Info);
     }
 }
 
@@ -236,6 +262,9 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
         return false;
     };
 
+    const Lang lang = parse_language(s.get_string(keys::kLanguage));
+    const bool language_changed = lang != language();
+    set_language(lang);
     if (touched(keys::kHotkey)) register_hotkey(s.get_string(keys::kHotkey));
     if (touched(keys::kStartWithWindows) && !paths_.portable) set_autostart(s.get_bool(keys::kStartWithWindows), paths_.exe);
 
@@ -287,6 +316,16 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
     for (const auto& g : s.get_list(keys::kExcludeApps)) exclude_patterns_.push_back(fold(widen(g)));
     if (git_) git_->configure(tools_.git, s.get_bool(keys::kGitStatus));
     if (touched(keys::kProjectRoots) || touched(keys::kScanDepth) || touched(keys::kScanExclude)) scan_repos();
+    if (!initial && touched(keys::kDevenvPath)) {
+        const HWND target = hwnd_;
+        const std::wstring devenv = expand_env(widen(s.get_string(keys::kDevenvPath)));
+        executor_->post([target, devenv] { post_owned(target, WM_KAMIL_TOOLS_READY, new Tools(discover_tools(devenv))); });
+    }
+    if (language_changed) {
+        invalidate_project({});
+        if (hotkey_ok_) tray_.set_tooltip(L"Kamil — " + hotkey_display(hotkey_text_));
+        else register_hotkey(s.get_string(keys::kHotkey));  // re-sends its message in the new language
+    }
     rebuild_items();
 }
 
@@ -301,10 +340,12 @@ void App::register_hotkey(const std::string& text) {
         tray_.set_tooltip(L"Kamil — " + hotkey_display(text));
         return;
     }
-    tray_.set_tooltip(L"Kamil — kısayol kullanılamıyor");
-    notify(L"Kısayol kaydedilemedi",
-           hotkey_display(text) + L" başka bir uygulama tarafından kullanılıyor (ör. PowerToys Run).\n"
-                                  L"Tray menüsünden Ayarları düzenle → general.hotkey ile değiştirin.",
+    log_line("[app] hotkey " + text + " is taken");
+    tray_.set_tooltip(loc(L"Kamil — hotkey unavailable", L"Kamil — kısayol kullanılamıyor"));
+    notify(loc(L"Hotkey could not be registered", L"Kısayol kaydedilemedi"),
+           fmt(loc(L"{} is used by another application (e.g. PowerToys Run).\nChange it with Edit settings → general.hotkey in the tray menu.",
+                   L"{} başka bir uygulama tarafından kullanılıyor (ör. PowerToys Run).\nTray menüsünden Ayarları düzenle → general.hotkey ile değiştirin."),
+               hotkey_display(text)),
            Tray::Balloon::Error);
 }
 
@@ -325,8 +366,12 @@ void App::rebuild_items() {
         it.kind = ItemKind::Command;
         it.key = std::wstring(L"kamil:") + c.id;
         it.target = c.id;
-        it.title = c.title;
-        it.subtitle = c.subtitle;
+        const bool tr = language() == Lang::Tr;
+        it.title = tr ? c.title_tr : c.title_en;
+        it.subtitle = tr ? c.sub_tr : c.sub_en;
+        // The other language's title as a search keyword ("ayarlar" also finds "Edit settings").
+        it.keywords = tr ? c.title_en : c.title_tr;
+        if (it.target == L"jobs") it.keywords += L" queue cancel kuyruk sıra iptal";
         it.prepare();
         items.push_back(std::move(it));
     }
@@ -372,6 +417,10 @@ void App::on_activate(const Item& item, LaunchMode mode) {
         schedule_usage_save();
     }
     if (item.kind == ItemKind::Command) {
+        if (item.target == L"jobs") {  // a list inside the launcher: stay open
+            show_jobs();
+            return;
+        }
         launcher_.hide();
         run_command(item.target);
         return;
@@ -391,7 +440,8 @@ void App::on_activate(const Item& item, LaunchMode mode) {
     executor_->post([item, mode, target] {
         const std::wstring err = launch_item(item, mode);
         if (!err.empty())
-            post_owned(target, WM_KAMIL_NOTIFY, new Notification{Notification::Level::Error, item.title + L" açılamadı", err});
+            post_owned(target, WM_KAMIL_NOTIFY,
+                       new Notification{Notification::Level::Error, fmt(loc(L"{} could not be opened", L"{} açılamadı"), item.title), err});
     });
 }
 
@@ -405,13 +455,17 @@ void App::run_command(const std::wstring& id) {
         executor_->post([dir] { open_folder(dir); });
     } else if (id == L"reload") {
         reload_settings(false);
-        if (diagnostics_.empty()) notify(L"Ayarlar yüklendi", L"settings.yaml sorunsuz okundu.", Tray::Balloon::Info);
+        if (diagnostics_.empty())
+            notify(loc(L"Settings loaded", L"Ayarlar yüklendi"), loc(L"settings.yaml was read without problems.", L"settings.yaml sorunsuz okundu."),
+                   Tray::Balloon::Info);
     } else if (id == L"rescan") {
         apps_provider_.scan_async(hwnd_);
         scan_repos();
         scan_files();
     } else if (id == L"forget") {
-        if (MessageBoxW(hwnd_, L"Öğrenilen tüm sık kullanılanlar ve arama tercihleri silinsin mi?", L"Kamil",
+        if (MessageBoxW(hwnd_,
+                        loc(L"Forget all learned favourites and search preferences?", L"Öğrenilen tüm sık kullanılanlar ve arama tercihleri silinsin mi?"),
+                        L"Kamil",
                         MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) == IDYES) {
             usage_.clear();
             usage_.save(paths_.usage_file());
@@ -420,8 +474,15 @@ void App::run_command(const std::wstring& id) {
         VsJob job;
         job.kind = VsJob::Kind::Diagnose;
         job.report_file = paths_.vs_report_file();
+        job.tools_report = tools_ready_ ? tools_.report : std::wstring(L"(tools are still being discovered)\n");
         vs_->submit(std::move(job));
-        notify(L"VS bağlantısı test ediliyor", L"Rapor birkaç saniye içinde açılacak.", Tray::Balloon::Info);
+        notify(loc(L"Testing the VS connection", L"VS bağlantısı test ediliyor"),
+               loc(L"The report opens in a few seconds.", L"Rapor birkaç saniye içinde açılacak."), Tray::Balloon::Info);
+    } else if (id == L"jobs") {
+        show_jobs();
+    } else if (id == L"log") {
+        const auto file = log_file();
+        executor_->post([file] { open_in_editor(file); });
     } else if (id == L"quit") {
         DestroyWindow(hwnd_);
     }
@@ -467,16 +528,23 @@ std::vector<Item> App::actions_for(const Item& item) const {
     const std::string vs = store_.current()->get_string(keys::kDefaultVs);
     switch (item.kind) {
         case ItemKind::Repo: {
-            if (is_project(item.path))
-                for (auto& a : const_cast<App*>(this)->project_actions(item)) actions.push_back(std::move(a));
+            const bool project = is_project(item.path);
+            std::vector<Item> project_list;
+            if (project) project_list = const_cast<App*>(this)->project_actions(item);
             const std::wstring& devenv = tools_.devenv(vs);
             const std::wstring other_vs = vs == "vs2022" ? tools_.devenv_2026 : tools_.devenv_2022;
             std::vector<Item> list;
-            if (!devenv.empty()) list.push_back(make_action(L"vs", vs_title(devenv == tools_.devenv_2022 ? "vs2022" : "vs2026") + L"'da aç", devenv, 0, L"Open Folder (CMake)"));
+            // Always offered: when Visual Studio was not found, the subtitle says why.
+            list.push_back(make_action(L"vs", fmt(loc(L"Open in {}", L"{}'da aç"), vs_title(!devenv.empty() && devenv == tools_.devenv_2022 ? "vs2022" : (devenv.empty() ? vs : "vs2026"))),
+                                       devenv, kGlyphFolder,
+                                       devenv.empty() ? std::wstring(loc(L"⚠ Visual Studio not found: set dev.devenv_path, or see Kamil: Test VS connection",
+                                                                         L"⚠ Visual Studio bulunamadı: dev.devenv_path ayarlayın ya da Kamil: VS bağlantısını test et"))
+                                                      : L"Open Folder (CMake)"));
             if (!other_vs.empty() && other_vs != devenv)
-                list.push_back(make_action(L"vs-other", vs_title(other_vs == tools_.devenv_2022 ? "vs2022" : "vs2026") + L"'da aç", other_vs, 0, L"Open Folder (CMake)"));
-            if (!tools_.code.empty()) list.push_back(make_action(L"code", L"VS Code'da aç", tools_.code, 0));
-            list.push_back(make_action(L"explorer", L"Gezgin'de aç", tools_.explorer, 0));
+                list.push_back(make_action(L"vs-other", fmt(loc(L"Open in {}", L"{}'da aç"), vs_title(other_vs == tools_.devenv_2022 ? "vs2022" : "vs2026")),
+                                           other_vs, 0, L"Open Folder (CMake)"));
+            if (!tools_.code.empty()) list.push_back(make_action(L"code", loc(L"Open in VS Code", L"VS Code'da aç"), tools_.code, 0));
+            list.push_back(make_action(L"explorer", loc(L"Open in Explorer", L"Gezgin'de aç"), tools_.explorer, 0));
             const std::string term = store_.current()->get_string(keys::kTerminal);
             const bool use_wt = term == "wt" && !tools_.wt.empty();
             const bool use_bash = term == "git-bash" && !tools_.git_bash.empty();
@@ -484,36 +552,50 @@ std::vector<Item> App::actions_for(const Item& item) const {
                                           : use_bash ? tools_.git_bash
                                           : term == "powershell" ? tools_.powershell
                                                                  : tools_.cmd;
-            const wchar_t* term_name = use_wt ? L"Windows Terminal" : use_bash ? L"Git Bash" : term == "powershell" ? L"PowerShell" : L"Komut İstemi";
-            Item terminal = make_action(L"terminal", L"Terminalde aç", term_exe, kGlyphTerminal, term_name);
-            list.push_back(std::move(terminal));
-            if (!tools_.git_bash.empty()) list.push_back(make_action(L"git-bash", L"Git Bash'te aç", tools_.git_bash, 0));
+            const wchar_t* term_name = use_wt ? L"Windows Terminal" : use_bash ? L"Git Bash" : term == "powershell" ? L"PowerShell" : loc(L"Command Prompt", L"Komut İstemi");
+            list.push_back(make_action(L"terminal", loc(L"Open in terminal", L"Terminalde aç"), term_exe, kGlyphTerminal, term_name));
+            if (!tools_.git_bash.empty()) list.push_back(make_action(L"git-bash", loc(L"Open in Git Bash", L"Git Bash'te aç"), tools_.git_bash, 0));
             if (!tools_.git_gui.empty()) list.push_back(make_action(L"git-gui", L"Git GUI", tools_.git_gui, 0));
-            list.push_back(make_action(L"copy-path", L"Yolu kopyala", {}, kGlyphCopy, item.path));
-            list.push_back(make_action(L"copy-branch", L"Dal adını kopyala", {}, kGlyphBranch));
+            list.push_back(make_action(L"copy-path", loc(L"Copy path", L"Yolu kopyala"), {}, kGlyphCopy, item.path));
+            list.push_back(make_action(L"copy-branch", loc(L"Copy branch name", L"Dal adını kopyala"), {}, kGlyphBranch));
             // The default Enter action first.
             const std::wstring def = default_repo_action();
+            std::vector<Item> sorted;
             for (auto& a : list)
-                if (a.target == def) actions.push_back(a);
+                if (a.target == def) sorted.push_back(a);
             for (auto& a : list)
-                if (a.target != def) actions.push_back(std::move(a));
+                if (a.target != def) sorted.push_back(std::move(a));
+            if (project) {
+                // Jobs to cancel, Debug, Build, Run, then the editors (VS / VS Code), then the rest.
+                size_t head = 0;
+                while (head < project_list.size() && project_list[head].target.rfind(L"cancel-job:", 0) == 0) ++head;
+                head = std::min(project_list.size(), head + 3);
+                for (size_t i = 0; i < head; ++i) actions.push_back(std::move(project_list[i]));
+                for (auto& a : sorted)
+                    if (a.target == L"vs" || a.target == L"code") actions.push_back(a);
+                for (size_t i = head; i < project_list.size(); ++i) actions.push_back(std::move(project_list[i]));
+                for (auto& a : sorted)
+                    if (a.target != L"vs" && a.target != L"code") actions.push_back(std::move(a));
+            } else {
+                for (auto& a : sorted) actions.push_back(std::move(a));
+            }
             break;
         }
         case ItemKind::Command:
-            actions.push_back(make_action(L"run", L"Çalıştır", {}, kGlyphPlay, item.subtitle));
+            actions.push_back(make_action(L"run", loc(L"Run", L"Çalıştır"), {}, kGlyphPlay, item.subtitle));
             break;
         case ItemKind::File:
         case ItemKind::Folder:
             actions = file_actions(item);
             break;
         default: {
-            Item open = make_action(L"open", L"Aç", item.target, 0);
+            Item open = make_action(L"open", loc(L"Open", L"Aç"), item.target, 0);
             open.key = item.key;  // reuse the item's own icon
             actions.push_back(std::move(open));
-            actions.push_back(make_action(L"admin", L"Yönetici olarak çalıştır", {}, kGlyphAdmin));
+            actions.push_back(make_action(L"admin", loc(L"Run as administrator", L"Yönetici olarak çalıştır"), {}, kGlyphAdmin));
             if (!item.path.empty()) {
-                actions.push_back(make_action(L"location", L"Dosya konumunu göster", {}, kGlyphFolder, item.path));
-                actions.push_back(make_action(L"copy-path", L"Yolu kopyala", {}, kGlyphCopy, item.path));
+                actions.push_back(make_action(L"location", loc(L"Show file location", L"Dosya konumunu göster"), {}, kGlyphFolder, item.path));
+                actions.push_back(make_action(L"copy-path", loc(L"Copy path", L"Yolu kopyala"), {}, kGlyphCopy, item.path));
             }
             break;
         }
@@ -526,6 +608,7 @@ void App::run_action(const Item& parent, const std::wstring& action) {
         usage_.record(parent.key, {}, now_unix());
         schedule_usage_save();
     }
+    if (run_job_action(parent, action)) return;
     if (parent.kind == ItemKind::Command) {
         launcher_.hide();
         run_command(parent.target);
@@ -562,7 +645,10 @@ void App::run_action(const Item& parent, const std::wstring& action) {
         exe = action == L"vs" ? tools_.devenv(vs) : (vs == "vs2022" ? tools_.devenv_2026 : tools_.devenv_2022);
         args = quote_arg(dir);
         if (exe.empty()) {
-            notify(L"Visual Studio bulunamadı", L"vswhere ile kurulu bir Visual Studio 2022/2026 bulunamadı.", Tray::Balloon::Warning);
+            notify(loc(L"Visual Studio not found", L"Visual Studio bulunamadı"),
+                   loc(L"Neither vswhere nor the standard install folders have Visual Studio 2022/2026. Set dev.devenv_path in settings.yaml.",
+                       L"vswhere ve standart kurulum klasörlerinde Visual Studio 2022/2026 yok. settings.yaml → dev.devenv_path ile yolu verin."),
+                   Tray::Balloon::Warning);
             return;
         }
     } else if (action == L"code") {
@@ -593,7 +679,9 @@ void App::run_action(const Item& parent, const std::wstring& action) {
         }
     }
     if (exe.empty()) {
-        notify(L"Program bulunamadı", L"Bu eylem için gereken program bu bilgisayarda bulunamadı.", Tray::Balloon::Warning);
+        notify(loc(L"Program not found", L"Program bulunamadı"),
+               loc(L"The program this action needs was not found on this computer.", L"Bu eylem için gereken program bu bilgisayarda bulunamadı."),
+               Tray::Balloon::Warning);
         return;
     }
     AllowSetForegroundWindow(ASFW_ANY);
@@ -602,7 +690,8 @@ void App::run_action(const Item& parent, const std::wstring& action) {
     const std::wstring title = parent.title;
     executor_->post([exe, args, dir, title, target] {
         const std::wstring err = run_program(exe, args, dir);
-        if (!err.empty()) post_owned(target, WM_KAMIL_NOTIFY, new Notification{Notification::Level::Error, title + L" açılamadı", err});
+        if (!err.empty())
+            post_owned(target, WM_KAMIL_NOTIFY, new Notification{Notification::Level::Error, fmt(loc(L"{} could not be opened", L"{} açılamadı"), title), err});
     });
 }
 
@@ -620,9 +709,9 @@ std::wstring App::repo_context(const std::wstring& path) {
     std::wstring out = branch.empty() ? std::wstring() : L"⎇ " + widen(branch);
     if (it == repo_states_.end() || !it->second.status.valid) return out + (fresh ? L"" : L"   …");
     const GitStatus& st = it->second.status;
-    if (st.conflicts) out += L"   ⚠ " + std::to_wstring(st.conflicts) + L" çakışma";
-    if (st.changes() - st.conflicts > 0) out += L"   ● " + std::to_wstring(st.changes() - st.conflicts) + L" değişiklik";
-    if (st.changes() == 0) out += L"   ✓ temiz";
+    if (st.conflicts) out += fmt(loc(L"   ⚠ {} conflicts", L"   ⚠ {} çakışma"), std::to_wstring(st.conflicts));
+    if (st.changes() - st.conflicts > 0) out += fmt(loc(L"   ● {} changes", L"   ● {} değişiklik"), std::to_wstring(st.changes() - st.conflicts));
+    if (st.changes() == 0) out += loc(L"   ✓ clean", L"   ✓ temiz");
     if (st.ahead) out += L"   ↑" + std::to_wstring(st.ahead);
     if (st.behind) out += L"   ↓" + std::to_wstring(st.behind);
     return out;
@@ -646,46 +735,47 @@ Footer App::footer_for(const Item* selected, const Item* parent) {
     };
     if (parent) {
         f.left = with_job(parent->kind == ItemKind::Repo ? parent->title + L"   " + repo_line(*parent) : parent->title);
-        f.right = L"Enter seç · Tab tamamla · Esc geri";
+        f.right = loc(L"Enter select · Tab complete · Esc back", L"Enter seç · Tab tamamla · Esc geri");
         return f;
     }
     if (!selected) {
         f.left = with_job({});
-        f.right = L"Esc kapat";
+        f.right = loc(L"Esc close", L"Esc kapat");
         return f;
     }
     switch (selected->kind) {
         case ItemKind::Repo: {
             f.left = with_job(repo_line(*selected));
             const std::wstring def = default_repo_action();
-            const std::wstring what = def == L"code" ? L"VS Code" : def == L"explorer" ? L"Gezgin" : def == L"terminal" ? L"Terminal"
-                                                                                                                    : L"Visual Studio";
-            f.right = is_project(selected->path) ? L"Alt+D debug · Alt+B build · Alt+R çalıştır · Ctrl+K"
-                                                 : L"Enter " + what + L" · Ctrl+K eylemler · Tab";
+            const std::wstring what = def == L"code" ? L"VS Code" : def == L"explorer" ? loc(L"Explorer", L"Gezgin") : def == L"terminal" ? L"Terminal"
+                                                                                                                                    : L"Visual Studio";
+            f.right = is_project(selected->path) ? std::wstring(loc(L"Alt+D debug · Alt+B build · Alt+R run · Ctrl+K", L"Alt+D debug · Alt+B build · Alt+R çalıştır · Ctrl+K"))
+                                                 : fmt(loc(L"Enter {} · Ctrl+K actions · Tab", L"Enter {} · Ctrl+K eylemler · Tab"), what);
             break;
         }
         case ItemKind::Command:
             f.left = with_job(selected->subtitle);
-            f.right = L"Enter çalıştır";
+            f.right = loc(L"Enter run", L"Enter çalıştır");
             break;
         case ItemKind::File: {
             f.left = with_job(selected->subtitle);
             std::wstring ext = std::filesystem::path(selected->path).extension().wstring();
             for (auto& c : ext) c = static_cast<wchar_t>(towlower(c));
             if (is_script_extension(ext))
-                f.right = store_.current()->get_string(keys::kScriptAction) == "edit" ? L"Enter düzenle · Alt+R çalıştır · Ctrl+K"
-                                                                                      : L"Enter çalıştır · Alt+E düzenle · Ctrl+K";
+                f.right = store_.current()->get_string(keys::kScriptAction) == "edit"
+                              ? loc(L"Enter edit · Alt+R run · Ctrl+K", L"Enter düzenle · Alt+R çalıştır · Ctrl+K")
+                              : loc(L"Enter run · Alt+E edit · Ctrl+K", L"Enter çalıştır · Alt+E düzenle · Ctrl+K");
             else
-                f.right = L"Enter aç · Alt+E düzenle · Ctrl+K";
+                f.right = loc(L"Enter open · Alt+E edit · Ctrl+K", L"Enter aç · Alt+E düzenle · Ctrl+K");
             break;
         }
         case ItemKind::Folder:
             f.left = with_job(selected->subtitle);
-            f.right = L"Enter Gezgin · Ctrl+K eylemler";
+            f.right = loc(L"Enter Explorer · Ctrl+K actions", L"Enter Gezgin · Ctrl+K eylemler");
             break;
         default:
             f.left = with_job(selected->path);
-            f.right = L"Enter aç · Ctrl+K eylemler · Tab";
+            f.right = loc(L"Enter open · Ctrl+K actions · Tab", L"Enter aç · Ctrl+K eylemler · Tab");
             break;
     }
     return f;
@@ -699,22 +789,30 @@ void App::toggle_from_tray() {
 
 void App::show_tray_menu(POINT at) {
     HMENU menu = CreatePopupMenu();
-    const std::wstring open = L"Kamil'i aç\t" + hotkey_display(hotkey_text_);
+    const std::wstring open = std::wstring(loc(L"Open Kamil\t", L"Kamil'i aç\t")) + hotkey_display(hotkey_text_);
     AppendMenuW(menu, MF_STRING, IDM_SHOW, open.c_str());
     SetMenuDefaultItem(menu, IDM_SHOW, FALSE);
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, IDM_SETTINGS, L"Ayarları düzenle (settings.yaml)");
-    AppendMenuW(menu, MF_STRING, IDM_CONFIG_DIR, L"Ayar klasörünü aç");
-    AppendMenuW(menu, MF_STRING, IDM_RELOAD, L"Ayarları yeniden yükle");
+    std::wstring jobs;
+    if (!jobs_.empty()) {
+        jobs = fmt(loc(L"VS jobs: {} (show / cancel)…", L"VS işleri: {} (göster / iptal)…"), std::to_wstring(jobs_.size()));
+        AppendMenuW(menu, MF_STRING, IDM_JOBS, jobs.c_str());
+        AppendMenuW(menu, MF_STRING, IDM_CANCEL_JOBS, loc(L"Cancel all VS jobs", L"Tüm VS işlerini iptal et"));
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    }
+    AppendMenuW(menu, MF_STRING, IDM_SETTINGS, loc(L"Edit settings (settings.yaml)", L"Ayarları düzenle (settings.yaml)"));
+    AppendMenuW(menu, MF_STRING, IDM_CONFIG_DIR, loc(L"Open settings folder", L"Ayar klasörünü aç"));
+    AppendMenuW(menu, MF_STRING, IDM_RELOAD, loc(L"Reload settings", L"Ayarları yeniden yükle"));
     std::wstring issues;
     if (!diagnostics_.empty()) {
-        issues = L"Ayar sorunları: " + std::to_wstring(diagnostics_.size()) + L" (ilki: satır " +
-                 std::to_wstring(diagnostics_.front().line) + L")";
+        issues = fmt(loc(L"Settings problems: {} (first: line {})", L"Ayar sorunları: {} (ilki: satır {})"), std::to_wstring(diagnostics_.size()),
+                     std::to_wstring(diagnostics_.front().line));
         AppendMenuW(menu, MF_STRING, IDM_ISSUES, issues.c_str());
     }
-    AppendMenuW(menu, MF_STRING, IDM_RESCAN, L"Uygulamaları yeniden tara");
+    AppendMenuW(menu, MF_STRING, IDM_RESCAN, loc(L"Rescan apps and files", L"Uygulamaları ve dosyaları yeniden tara"));
+    AppendMenuW(menu, MF_STRING, IDM_LOG, loc(L"Open log", L"Günlüğü aç"));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, IDM_EXIT, L"Çıkış");
+    AppendMenuW(menu, MF_STRING, IDM_EXIT, loc(L"Quit", L"Çıkış"));
 
     SetForegroundWindow(hwnd_);  // required for the menu to close when clicking elsewhere
     const UINT cmd = TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, at.x, at.y, hwnd_, nullptr);
@@ -728,6 +826,13 @@ void App::show_tray_menu(POINT at) {
         case IDM_CONFIG_DIR: run_command(L"config-dir"); break;
         case IDM_RELOAD: run_command(L"reload"); break;
         case IDM_RESCAN: run_command(L"rescan"); break;
+        case IDM_JOBS: show_jobs(); break;
+        case IDM_CANCEL_JOBS: {
+            Item none;
+            run_job_action(none, L"cancel-all-jobs");
+            break;
+        }
+        case IDM_LOG: run_command(L"log"); break;
         case IDM_EXIT: run_command(L"quit"); break;
         default: break;
     }
@@ -782,8 +887,16 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_KAMIL_TOOLS_READY: {
             std::unique_ptr<Tools> tools(reinterpret_cast<Tools*>(lp));
+            const std::wstring override_path = expand_env(widen(store_.current()->get_string(keys::kDevenvPath)));
+            if (!override_path.empty() && tools->report.find(L"dev.devenv_path") == std::wstring::npos) {
+                // The startup discovery ran before the settings were read: redo it with the override.
+                const HWND target = hwnd_;
+                executor_->post([target, override_path] { post_owned(target, WM_KAMIL_TOOLS_READY, new Tools(discover_tools(override_path))); });
+            }
             tools_ = std::move(*tools);
             tools_ready_ = true;
+            log_line(L"[tools]\n" + tools_.report);
+            invalidate_project({});
             if (git_) git_->configure(tools_.git, store_.current()->get_bool(keys::kGitStatus));
             return 0;
         }

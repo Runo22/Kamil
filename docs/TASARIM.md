@@ -1,8 +1,8 @@
 # Kamil — Windows için Offline, Geliştirici Odaklı Başlatıcı
 
-> Durum: **Taslak v1.0** · Uygulama: **Faz 0 + git + Faz 1 + dosya/script araması kodlandı** (bkz. README) · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
+> Durum: **Taslak v1.1** · Uygulama: **Faz 0 + git + Faz 1 + dosya/script araması kodlandı** (bkz. README) · Hedef: **Windows 10 22H2** (x64), Windows 11'de ek görsel iyileştirmeler · Dil: **C++23** · Projeler: **CMake + Ninja, VS Open Folder**
 
-Alfred'in iş akışını Windows'a, internetsiz bir iş bilgisayarına taşıyan; uygulama/dosya/klasör/LAN
+İnternetsiz bir Windows iş bilgisayarı için; uygulama/dosya/klasör/LAN
 kaynaklarını anında bulan; script'leri, özel komutları, süreçleri ve CMake projelerinin
 build/debug planlarını tek kısayoldan (`Alt+Space`) yöneten, sürekli arka planda hazır duran bir yardımcı.
 
@@ -12,10 +12,11 @@ build/debug planlarını tek kısayoldan (`Alt+Space`) yöneten, sürekli arka p
 |---|---|
 | İşletim sistemi | Windows 10 22H2 birincil hedef; Win11'de Acrylic + sistem yuvarlak köşeleri otomatik |
 | Dil / derleme | C++23, **VS2026** (MSVC v145) hedef; CMake + Ninja, Open Folder. VS2022 ile derlenmesi garanti değil, en iyi çaba |
-| Ayar biçimi | **YAML** (rapidyaml), şema tabanlı ayar altyapısı + kapsamlı Ayarlar penceresi (§9) |
+| Ayar biçimi | **YAML** (rapidyaml), şema tabanlı ayar altyapısı (§9); Ayarlar penceresi **ertelendi** (istenince) |
 | Dosya arama | Kendi indeksimiz birincil; **Everything opsiyonel** (kuruluysa ve açıksa kullanılır); yönetici yetkisi olduğu için **MFT/USN indeksleyici** de seçenek |
 | Hariç tutma | Aranmayacak klasör/desenler ayarlardan girilir; her sonuçta "Aramadan çıkar" eylemi |
-| Ayarlar | **Ayrı bir Ayarlar penceresi** (config dosyası yine elle düzenlenebilir) |
+| Ayarlar | Şimdilik `settings.yaml` (açıklamalı, JSON Schema ile editörde tamamlama); ayrı pencere **kullanıcı tekrar isteyene kadar ertelendi** |
+| Arayüz dili | **İngilizce + Türkçe**; varsayılan Windows görüntü dilini izler (`general.language: auto | en | tr`) |
 | Projeler | CMake + **Ninja** (tek-config, preset başına bir konfigürasyon); `CMakePresets.json` + CMake File API |
 | VS'te açma | **Open Folder** |
 | VS sürümü | **Varsayılan VS2026**; proje başına tek sürüm (2022 *veya* 2026), ikisi aynı projede kullanılmaz |
@@ -26,7 +27,7 @@ build/debug planlarını tek kısayoldan (`Alt+Space`) yöneten, sürekli arka p
 | Öncelik | **Build / Debug / Çalıştır / COM port** akışı ilk geliştirilecek bölüm |
 | Özel komutlar | Parametreli, kısayol atanabilir, zincirlenebilir kullanıcı komutları |
 | Kısayol | `Alt+Space` |
-| Git | Proje köklerindeki depolar sonuçlarda; dal anında (HEAD okunur), değişiklik/ahead-behind arka planda `git status` ile (§5.11) |
+| Git | Proje köklerindeki depolar sonuçlarda; dal anında (HEAD okunur), değişiklik/ahead-behind arka planda `git status` ile (§5.10) |
 | İkonlar | Her sonuç ve eylem **gerçek uygulama/dosya ikonuyla** gösterilir (VS 2026, VS Code, Git Bash, klasör…); ikon yoksa Segoe MDL2 glifi, o da yoksa baş harf |
 | Tamamlama | `Tab` seçili öğenin adını (veya bağlama göre preset/dal adını) arama kutusuna yazar |
 | Eylem paneli | `Ctrl+K` veya metnin sonunda `→`; her eylem kendi programının ikonuyla |
@@ -187,7 +188,6 @@ public:
   projects\*.yaml           ← proje/plan ekleri
   schema\*.json             ← otomatik üretilen JSON Schema
   scripts\                  ← script klasörü (otomatik komut olur)
-  plugins\                  ← Alfred uyumlu Script Filter eklentileri
   cache\index.bin           ← mmap indeks
   cache\icons.bin           ← ikon atlası
   kamil.db                  ← SQLite: geçmiş, öğrenme, son planlar, VS komut eşlemeleri
@@ -284,10 +284,7 @@ meta ile başlık, kısayol, çalışma modu, Python yorumlayıcısı belirlenir
 ### 5.8 Sistem
 Kilitle, uyku, yeniden başlat, kapat (onaylı), geri dönüşüm kutusu, aygıt yöneticisi, hizmetler, olay görüntüleyici.
 
-### 5.9 Alfred uyumlu eklentiler
-`plugins\<ad>\` + herhangi bir script; Alfred **Script Filter JSON** çıktısı okunur, `cache.seconds` ile önbelleklenir.
-
-### 5.10 Özel komutlar
+### 5.9 Özel komutlar
 
 Kullanıcı tanımlı, başlatıcıda normal sonuç gibi görünen komutlar. Ayarlar → **Komutlar** sekmesinden
 düzenlenir ("Test et" düğmesiyle), `commands.yaml`'a yazılır.
@@ -335,7 +332,7 @@ actions:                    # bağlamsal eylem: eşleşen öğelerin Tab menüs�
   `{output}` `{output_dir}` `{project_dir}` `{build_dir}` `{env:VAR}`.
 - Özel komutlar plan adımı (`pre`/`post`) olarak da kullanılabilir.
 
-### 5.11 Git entegrasyonu
+### 5.10 Git entegrasyonu
 
 **Keşif:** `dev.project_roots` altındaki klasörler arka planda taranır (`dev.scan_depth`, `dev.scan_exclude`);
 `.git` klasörü veya worktree/submodule `.git` dosyası (`gitdir: …`) olan her klasör bir **depo öğesi** olur.
@@ -485,15 +482,22 @@ VS, Running Object Table'a `!VisualStudio.DTE.17.0:<pid>` (2022) / `!VisualStudi
 | Konu | Bilinen | Kamil'in yaklaşımı |
 |---|---|---|
 | CMake komut adları (Configure/Generate Cache, Delete Cache and Reconfigure) | Menüde var, DTE adları belgelenmemiş | VS'in `DTE.Commands` tablosunda adında `GenerateCache`/`ConfigureCache`/`DeleteCache` geçen komut aranır, örnek başına önbelleklenir; `dev.vs_configure_command` ile elle verilebilir |
-| `Build.BuildAll` | `ExecuteCommand` devre dışı komutu çalıştırmaz | CMake hazırlanırken komut reddedilir → 1 sn aralıkla 5 dk'ya kadar yeniden denenir |
+| `Build.BuildAll` | `ExecuteCommand` devre dışı komutu çalıştırmaz; olmayan komut adı da aynı hatayı verir | Önce komutun **var olup olmadığı** `DTE.Commands.Item(ad)` ile denetlenir: yoksa beklemeden hata (Open Folder'da `Build.BuildAll`, çözümde `Build.BuildSolution` denenir). Varsa `IsAvailable` olana kadar `dev.vs_wait_seconds` (vars. 90 sn) beklenir; bekleme nedeni ("CMake hazırlanıyor" / "VS başka build yapıyor") alt bilgide görünür |
 | Build bitişi | `SolutionBuild.BuildState` (1/2/3); Open Folder'da güvenilirliği bilinmiyor | Önce BuildState; hiç "sürüyor" görülmezse Build bölmesinin sonundaki "All succeeded/failed" satırı; o da yoksa 15 sn sessizlik |
 | Build çıktısı | Output → Build bölmesinin GUID'i `{1BD8A850-02D1-11D1-BEE7-00A0C913D1F8}` (dil bağımsız) | Bölme GUID ile, yoksa adıyla ("Build", "Derleme") bulunur; MSVC/Ninja satırları ayrıştırılır |
 | Hangi VS penceresi bu klasörü açmış? | `Solution.FullName` Open Folder'da klasörü vermeyebilir | Sırasıyla: FullName eşleşmesi → Kamil'in açtığı örneğin PID'i → pencere başlığı "Klasör - Microsoft Visual Studio" |
 | Duraklatılmış sürece bağlanma | `DebugActiveProcess` duraklatılmış sürece bağlanabilir; ilk iş parçacığı devam edince durulur | `CREATE_SUSPENDED` → `Process2.Attach2("Native")` (olmazsa `Attach`) → `ResumeThread`; bağlanamazsa program yine de devam ettirilir ve uyarılır |
-| Meşgul VS (RPC_E_CALL_REJECTED) | COM çağrıları reddedilebilir | Köprü iş parçacığında `IMessageFilter` ile 60 sn'ye kadar otomatik yeniden deneme |
+| Meşgul VS (RPC_E_CALL_REJECTED) | COM çağrıları reddedilebilir | Köprü iş parçacığında `IMessageFilter` ile 30 sn'ye kadar otomatik yeniden deneme |
+| Yönetici olarak açılmış VS | Yükseltilmemiş Kamil, yükseltilmiş VS'i ROT'ta göremez | `devenv.exe` pencereleri başlıklarıyla taranır; klasörü açan pencere yükseltilmişse yeni VS açmak yerine nedeni söyleyen hata verilir |
+| `devenv "<klasör>"` hemen kapanırsa | Eski sürüm 180 sn boşuna bekliyordu | Süreç kapandıysa 5 sn sonra hata; klasör başka bir örnekte açıldıysa o kullanılır; tüm beklemeler `dev.vs_wait_seconds` ile sınırlı |
+| İş kuyruğu | İşler tek tek çalışır; önceki iş beklerken sonrakiler görünmeden sırada kalıyordu | **Kamil: VS işleri** listesi (çalışan + sıradaki işler, Enter = iptal), alt bilgide "+N sırada", tray menüsünde iptal; aynı iş ikinci kez sıraya alınmaz; çalışan build iptalinde VS'e `Build.Cancel` gönderilir |
+| devenv.exe bulunamadı | vswhere `-utf8` çıktısı BOM ile başlayabiliyor → yol eşleşmiyordu | BOM temizlenir; vswhere yoksa `Program Files\Microsoft Visual Studio\18|2022\<sürüm>` taranır; `dev.devenv_path` ile elle verilebilir. "Visual Studio'da aç" eylemi her zaman görünür, bulunamadıysa nedenini yazar |
 | VS'te aktif preset | Saklandığı yer belgelenmemiş | Build klasörleri arasında en son configure edilen (File API yanıtı / CMakeCache zamanı) aktif kabul edilir |
 
-Tanı komutu **Kamil: VS bağlantısını test et**, `vs-probe.ps1`'in yaptığını Kamil içinden yapar ve raporu açar.
+Tanı komutu **Kamil: VS bağlantısını test et**, `vs-probe.ps1`'in yaptığını Kamil içinden yapar ve raporu açar
+(devenv'in nasıl bulunduğu, devenv pencereleri ve yönetici durumu, COM ile erişilen örnekler, komut adları).
+Ayrı iş parçacığında çalışır: kuyrukta takılı bir iş varken de kullanılabilir. Her adım `kamil.log`'a yazılır
+(**Kamil: Günlüğü aç**).
 
 ### 7.4 Debug akışı
 
@@ -730,7 +734,10 @@ inline const SettingDef kSettings[] = {
 | **İçe/dışa aktarma** | Tüm ayarları tek `.zip` veya tek birleşik `.yaml` olarak; başka PC'ye taşıma |
 | **JSON Schema** | Şemadan otomatik üretilir; VS Code'da (YAML eklentisiyle) otomatik tamamlama ve hata gösterimi |
 
-### 9.3 Ayarlar penceresi
+### 9.3 Ayarlar penceresi (ertelendi)
+
+> **Ertelendi:** kullanıcı tekrar isteyene kadar yapılmayacak. Aşağıdaki tasarım o zamana kadar referans olarak kalır;
+> şimdilik açıklamalı `settings.yaml` + JSON Schema (VS Code'da tamamlama ve hata gösterimi) kullanılır.
 
 Tray menüsü, `Ctrl+,` veya `ayarlar` yazarak açılır. Solda sekmeler, üstte **tüm ayarlarda arama**
 (VS Code ayarları gibi: "kısayol" yazınca ilgili tüm ayarlar listelenir), sağda şemadan üretilen form.
@@ -776,6 +783,8 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 | Uygulamalar (Başlat Menüsü + UWP), dosya/klasör indeksi (`search.folders`), script çalıştır/düzenle | ✓ |
 | Git: depo keşfi, dal, değişiklik/ahead-behind, depo eylemleri | ✓ |
 | CMake + VS: preset/hedef/argüman/COM seçimi, VS'te build/configure (DTE), debug (başlat+bağlan), çalıştır | ✓ (gerçek VS'te doğrulanacak) |
+| İki dilli arayüz (İngilizce / Türkçe, sistem diline göre), komutlar iki dilde de aranır | ✓ |
+| VS iş kuyruğu: görünür liste, iptal, sınırlı ve nedenli beklemeler, yönetici VS tespiti, `kamil.log` | ✓ |
 | Eylem paneli, `Tab` tamamlama, alt bilgi çubuğu, iş durumu | ✓ |
 
 ### 11.2 Sıradaki fazlar
@@ -786,7 +795,7 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 
 | İş | Neden | Büyüklük |
 |---|---|---|
-| Günlük dosyası (`logs\kamil.log`) + çökme dökümü (minidump) + "Kamil: Tanılama" | Sorun çıktığında tahmin yerine kayıtla düzeltmek için | K |
+| Çökme dökümü (minidump) + "Kamil: Tanılama" (günlük dosyası `kamil.log` eklendi) | Sorun çıktığında tahmin yerine kayıtla düzeltmek için | K |
 | Gerçek kullanım geri bildirimleri: VS köprüsü (komut adları, build bitişi, attach), ikonlar, odak/kısayol | Faz 1 hiçbir gerçek VS'e karşı denenmedi | O |
 | Dosya indeksinde canlı güncelleme (`ReadDirectoryChangesW`) + diske önbellek | Yeni script'in anında görünmesi, açılışta tam tarama beklememek | O |
 | Performans ölçümü (`kamil-bench`): tuş başı gecikme p50/p99, açılış süresi | "Hızlı olması kritik" hedefini sayıyla korumak | K |
@@ -795,7 +804,6 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 
 | İş | Neden | Büyüklük |
 |---|---|---|
-| Ayarlar penceresi (şemadan üretilen form, arama, hata gösterimi, yorum koruyarak yazma) | "Kesinlikle lazım" denmişti; YAML'i elle düzenleme zorunluluğunu kaldırır | B |
 | Özel komutlar (parametreli, `{com}`/`{clip}`… yer tutucular, zincir, onay) | "Custom command desteği olmalı" | O |
 | Öğe başına global kısayollar (script, komut, klasör, plan eylemi: ör. `Ctrl+Alt+F5` = Debug) | İlk istek: "global erişimi olan scriptler" | K |
 | LAN / intranet: yer imleri, UNC yolları, şablonlu URL'ler (`bug 1234`), erişilebilirlik testi (SMB donmasını önler) | İlk istek: "offline olsa bile LAN üzerinden klasör ve web siteleri" | O |
@@ -817,7 +825,7 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 | Python venv keşfi, `py` komutu | Python script'leri çoğalırsa |
 | Saat/sıra tabanlı tahmin ("muhtemelen şimdi") | Mevcut öğrenme yetersiz kalırsa |
 | Windows 11 Acrylic | Windows 11'e geçilirse |
-| Alfred uyumlu Script Filter eklentileri | Alfred'deki workflow'lar taşınmak istenirse |
+| Ayarlar penceresi (şemadan üretilen form, §9.3) | **Ertelendi**: kullanıcı tekrar isteyince |
 
 ### 11.3 Bilinçli olarak yapılmayacaklar
 
@@ -829,6 +837,7 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 | Kurulum sihirbazı / MSI | Tek taşınabilir exe yeterli |
 | Kamil'in kendisinin derlemesi | Karar: derlemeyi VS yapar, Kamil tetikler |
 | Eklenti pazarı, tema mağazası, yapay zekâ entegrasyonu | Offline ortam ve sadelik hedefiyle çelişir |
+| Alfred uyumluluğu (Script Filter eklentileri, workflow içe aktarma) | İstenmedi; özel komutlar ve script'ler aynı ihtiyacı karşılar |
 
 ---
 
@@ -836,4 +845,4 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 
 1. Gerçek kullanımda VS köprüsü: "Kamil: VS bağlantısını test et" raporu, Debug/Build ilk deneme sonuçları.
 2. Aynı anda birden çok örnek çalıştırırken COM port davranışı (§7.5) uygun mu?
-3. Faz B'nin sırası: Ayarlar penceresi mi, özel komutlar + kısayollar mı önce?
+3. Faz B'nin sırası: özel komutlar + kısayollar mı, LAN / yer imleri mi önce? (Ayarlar penceresi ertelendi.)

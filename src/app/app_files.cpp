@@ -6,6 +6,7 @@
 
 #include "app/action_item.h"
 #include "app/app.h"
+#include "core/i18n.h"
 #include "core/settings_schema.h"
 #include "core/text.h"
 #include "platform/process.h"
@@ -161,7 +162,8 @@ void App::add_file_hits(const std::wstring& query, std::vector<Hit>& hits) {
 
 void App::run_detached(std::wstring exe, std::wstring args, std::wstring dir, bool admin, std::wstring title, const wchar_t* verb) {
     if (exe.empty()) {
-        notify(title + L" çalıştırılamadı", L"Gereken program bulunamadı.", Tray::Balloon::Warning);
+        notify(fmt(loc(L"{} could not be run", L"{} çalıştırılamadı"), title), loc(L"The program it needs was not found.", L"Gereken program bulunamadı."),
+               Tray::Balloon::Warning);
         return;
     }
     AllowSetForegroundWindow(ASFW_ANY);
@@ -170,7 +172,9 @@ void App::run_detached(std::wstring exe, std::wstring args, std::wstring dir, bo
     const std::wstring verb_text = verb ? verb : L"";
     executor_->post([exe, args, dir, admin, title, target, verb_text] {
         const std::wstring err = run_program(exe, args, dir, admin, verb_text.empty() ? nullptr : verb_text.c_str());
-        if (!err.empty()) post_owned(target, WM_KAMIL_NOTIFY, new Notification{Notification::Level::Error, title + L" çalıştırılamadı", err});
+        if (!err.empty())
+            post_owned(target, WM_KAMIL_NOTIFY,
+                       new Notification{Notification::Level::Error, fmt(loc(L"{} could not be run", L"{} çalıştırılamadı"), title), err});
     });
 }
 
@@ -207,7 +211,10 @@ void App::run_script(const Item& item, bool admin) {
     } else if (ext == L".py") {
         const std::wstring py = python_for(false);
         if (py.empty()) {
-            notify(L"Python bulunamadı", L"py launcher veya python.exe yok. settings.yaml → scripts.python ile yolu verin.", Tray::Balloon::Warning);
+            notify(loc(L"Python not found", L"Python bulunamadı"),
+                   loc(L"No py launcher or python.exe. Set the path in settings.yaml → scripts.python.",
+                       L"py launcher veya python.exe yok. settings.yaml → scripts.python ile yolu verin."),
+                   Tray::Balloon::Warning);
             return;
         }
         if (keep) run_detached(cmd, via_cmd(py, quote_arg(path)), dir, admin, item.title);
@@ -215,13 +222,17 @@ void App::run_script(const Item& item, bool admin) {
     } else if (ext == L".pyw") {
         const std::wstring pyw = python_for(true);
         if (pyw.empty()) {
-            notify(L"Python bulunamadı", L"pyw.exe / pythonw.exe yok. settings.yaml → scripts.python ile yolu verin.", Tray::Balloon::Warning);
+            notify(loc(L"Python not found", L"Python bulunamadı"),
+                   loc(L"No pyw.exe / pythonw.exe. Set the path in settings.yaml → scripts.python.",
+                       L"pyw.exe / pythonw.exe yok. settings.yaml → scripts.python ile yolu verin."),
+                   Tray::Balloon::Warning);
             return;
         }
         run_detached(pyw, quote_arg(path), dir, admin, item.title);
     } else if (ext == L".sh") {
         if (tools_.bash.empty()) {
-            notify(L"bash bulunamadı", L".sh çalıştırmak için Git for Windows gerekli.", Tray::Balloon::Warning);
+            notify(loc(L"bash not found", L"bash bulunamadı"), loc(L"Running .sh files needs Git for Windows.", L".sh çalıştırmak için Git for Windows gerekli."),
+                   Tray::Balloon::Warning);
             return;
         }
         if (keep) run_detached(cmd, via_cmd(tools_.bash, quote_arg(path)), dir, admin, item.title);
@@ -282,7 +293,7 @@ std::vector<Item> App::file_actions(const Item& item) const {
     const std::string editor = store_.current()->get_string(keys::kScriptEditor);
     const std::wstring notepad = expand_env(L"%WINDIR%\\notepad.exe");
     const std::wstring editor_exe = editor == "notepad" ? notepad : (!tools_.code.empty() ? tools_.code : notepad);
-    const std::wstring editor_name = editor_exe == notepad ? L"Not Defteri" : L"VS Code";
+    const std::wstring editor_name = editor_exe == notepad ? loc(L"Notepad", L"Not Defteri") : L"VS Code";
     const std::wstring dir = std::filesystem::path(item.path).parent_path().wstring();
     auto with_icon_of_item = [&](Item a) {
         a.icon_source = item.icon_source;
@@ -291,19 +302,20 @@ std::vector<Item> App::file_actions(const Item& item) const {
     };
 
     if (item.kind == ItemKind::Folder) {
-        list.push_back(make_action(L"dir-open", L"Gezgin'de aç", tools_.explorer, 0));
-        if (!tools_.code.empty()) list.push_back(make_action(L"dir-code", L"VS Code'da aç", tools_.code, 0));
+        list.push_back(make_action(L"dir-open", loc(L"Open in Explorer", L"Gezgin'de aç"), tools_.explorer, 0));
+        if (!tools_.code.empty()) list.push_back(make_action(L"dir-code", loc(L"Open in VS Code", L"VS Code'da aç"), tools_.code, 0));
         const std::wstring& devenv = tools_.devenv(vs_choice());
-        if (!devenv.empty()) list.push_back(make_action(L"dir-vs", L"Visual Studio'da aç (Open Folder)", devenv, 0));
-        list.push_back(make_action(L"file-terminal", L"Terminalde aç", {}, kGlyphTerminal, item.path));
-        list.push_back(make_action(L"file-copy", L"Yolu kopyala", {}, kGlyphCopy, item.path));
+        if (!devenv.empty()) list.push_back(make_action(L"dir-vs", loc(L"Open in Visual Studio (Open Folder)", L"Visual Studio'da aç (Open Folder)"), devenv, 0));
+        list.push_back(make_action(L"file-terminal", loc(L"Open in terminal", L"Terminalde aç"), {}, kGlyphTerminal, item.path));
+        list.push_back(make_action(L"file-copy", loc(L"Copy path", L"Yolu kopyala"), {}, kGlyphCopy, item.path));
         return list;
     }
 
     const std::wstring ext = lower_ext(item.path);
     const bool script = is_script_extension(ext);
-    Item run = with_icon_of_item(make_action(script ? L"file-run" : L"file-open", script ? L"Çalıştır" : L"Aç", {}, kGlyphPlay, item.path));
-    Item edit = make_action(L"file-edit", L"Düzenle — " + editor_name, editor_exe, 0, item.path);
+    Item run = with_icon_of_item(
+        make_action(script ? L"file-run" : L"file-open", script ? loc(L"Run", L"Çalıştır") : loc(L"Open", L"Aç"), {}, kGlyphPlay, item.path));
+    Item edit = make_action(L"file-edit", fmt(loc(L"Edit — {}", L"Düzenle — {}"), editor_name), editor_exe, 0, item.path);
     if (script && store_.current()->get_string(keys::kScriptAction) == "edit") {
         list.push_back(std::move(edit));
         list.push_back(std::move(run));
@@ -311,11 +323,11 @@ std::vector<Item> App::file_actions(const Item& item) const {
         list.push_back(std::move(run));
         list.push_back(std::move(edit));
     }
-    if (script) list.push_back(make_action(L"file-admin", L"Yönetici olarak çalıştır", {}, kGlyphAdmin));
-    else list.push_back(make_action(L"file-openas", L"Birlikte aç…", {}, kGlyphOpenWith));
-    list.push_back(make_action(L"file-location", L"Dosya konumunu göster", tools_.explorer, 0, dir));
-    list.push_back(make_action(L"file-terminal", L"Bu klasörde terminal", {}, kGlyphTerminal, dir));
-    list.push_back(make_action(L"file-copy", L"Yolu kopyala", {}, kGlyphCopy, item.path));
+    if (script) list.push_back(make_action(L"file-admin", loc(L"Run as administrator", L"Yönetici olarak çalıştır"), {}, kGlyphAdmin));
+    else list.push_back(make_action(L"file-openas", loc(L"Open with…", L"Birlikte aç…"), {}, kGlyphOpenWith));
+    list.push_back(make_action(L"file-location", loc(L"Show file location", L"Dosya konumunu göster"), tools_.explorer, 0, dir));
+    list.push_back(make_action(L"file-terminal", loc(L"Terminal in this folder", L"Bu klasörde terminal"), {}, kGlyphTerminal, dir));
+    list.push_back(make_action(L"file-copy", loc(L"Copy path", L"Yolu kopyala"), {}, kGlyphCopy, item.path));
     return list;
 }
 

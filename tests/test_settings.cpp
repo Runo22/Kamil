@@ -1,6 +1,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "core/i18n.h"
 #include "core/settings.h"
 #include "core/settings_schema.h"
 #include "test.h"
@@ -175,4 +176,24 @@ TEST(duration_format) {
     CHECK(!parse_duration("soon", &ms));
     CHECK_EQ(format_duration(86'400'000), std::string("1d"));
     CHECK_EQ(format_duration(1500), std::string("1500ms"));
+}
+
+TEST(settings_messages_follow_language) {
+    const char* yaml = "appearance:\n  max_rows: 500\n";
+    set_language(Lang::En);
+    auto en = load_settings_text(builtin_schema(), yaml, "settings.yaml");
+    set_language(Lang::Tr);
+    auto tr = load_settings_text(builtin_schema(), yaml, "settings.yaml");
+    const std::string yaml_tr = generate_default_yaml(builtin_schema());
+    set_language(Lang::En);
+    const std::string yaml_en = generate_default_yaml(builtin_schema());
+    CHECK(!en.diagnostics.empty() && !tr.diagnostics.empty());
+    CHECK(en.diagnostics.front().message != tr.diagnostics.front().message);
+    CHECK(yaml_en != yaml_tr);
+    CHECK(yaml_en.find("Hotkey") != std::string::npos);
+    CHECK(parse_language("tr") == Lang::Tr);
+    CHECK(parse_language("en") == Lang::En);
+    // Both default files load back without problems.
+    CHECK(load_settings_text(builtin_schema(), yaml_tr).diagnostics.empty());
+    CHECK(load_settings_text(builtin_schema(), yaml_en).diagnostics.empty());
 }

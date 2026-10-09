@@ -13,6 +13,7 @@
 #endif
 
 #include "core/ryml_support.h"
+#include "core/i18n.h"
 #include "core/text.h"
 
 namespace kamil {
@@ -196,11 +197,11 @@ private:
     bool resolve(const std::string& name, Resolved& out, std::set<std::string>& visiting) {
         auto it = raw_.find(name);
         if (it == raw_.end()) {
-            errors_.push_back("bilinmeyen preset: " + name);
+            errors_.push_back(std::string(loc("unknown preset: ", "bilinmeyen preset: ")) + name);
             return false;
         }
         if (!visiting.insert(name).second) {
-            errors_.push_back("döngüsel inherits: " + name);
+            errors_.push_back(std::string(loc("circular inherits: ", "döngüsel inherits: ")) + name);
             return false;
         }
         const RawPreset& p = it->second;
@@ -349,7 +350,7 @@ CodeModel read_codemodel(const fs::path& build_dir) {
         if (name.rfind(L"index-", 0) == 0 && name.size() > 11 && (index.empty() || name > index.filename().wstring())) index = it->path();
     }
     if (index.empty()) {
-        cm.error = "File API yanıtı yok (proje henüz configure edilmemiş)";
+        cm.error = loc("no File API reply (the project has not been configured yet)", "File API yanıtı yok (proje henüz configure edilmemiş)");
         return cm;
     }
     try {
@@ -364,7 +365,7 @@ CodeModel read_codemodel(const fs::path& build_dir) {
             }
         }
         if (codemodel_file.empty()) {
-            cm.error = "File API yanıtında codemodel yok";
+            cm.error = loc("the File API reply has no codemodel", "File API yanıtında codemodel yok");
             return cm;
         }
         const std::string cm_text = read_file(reply / utf8_path(codemodel_file));
@@ -373,7 +374,7 @@ CodeModel read_codemodel(const fs::path& build_dir) {
         if (auto b = child_str(child(model.crootref(), "paths"), "build"); !b.empty()) top_build = utf8_path(b);
         auto configs = child(model.crootref(), "configurations");
         if (configs.invalid() || !configs.is_seq() || configs.num_children() == 0) {
-            cm.error = "codemodel boş";
+            cm.error = loc("codemodel is empty", "codemodel boş");
             return cm;
         }
         auto config = configs.first_child();  // single-config generators (Ninja) have exactly one
@@ -401,7 +402,7 @@ CodeModel read_codemodel(const fs::path& build_dir) {
         }
         cm.valid = true;
     } catch (const RymlError& e) {
-        cm.error = "File API JSON okunamadı: " + e.message;
+        cm.error = std::string(loc("cannot read File API JSON: ", "File API JSON okunamadı: ")) + e.message;
     }
     return cm;
 }

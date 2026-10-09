@@ -14,6 +14,7 @@
 #endif
 
 #include "core/hotkey.h"
+#include "core/i18n.h"
 #include "core/ryml_support.h"
 #include "core/text.h"
 
@@ -54,26 +55,31 @@ bool Schema::has_section(std::string_view prefix) const {
     return false;
 }
 
-void Schema::set_section_title(std::string section, std::string title) {
-    section_titles_.emplace_back(std::move(section), std::move(title));
+void Schema::set_section_title(std::string section, std::string title_en, std::string title_tr) {
+    section_titles_.push_back(SectionTitle{std::move(section), std::move(title_en), std::move(title_tr)});
 }
 
 std::string_view Schema::section_title(std::string_view section) const {
-    for (const auto& [s, t] : section_titles_)
-        if (s == section) return t;
+    for (const auto& t : section_titles_)
+        if (t.section == section) return language() == Lang::Tr && !t.tr.empty() ? t.tr : t.en;
     return {};
+}
+
+const std::string& setting_title(const SettingDef& d) { return language() == Lang::Tr && !d.title_tr.empty() ? d.title_tr : d.title; }
+const std::string& setting_description(const SettingDef& d) {
+    return language() == Lang::Tr && !d.description_tr.empty() ? d.description_tr : d.description;
 }
 
 // ---------------------------------------------------------------------------------------------
 // Diagnostics
 
 std::string Diagnostic::to_string() const {
-    std::string out = file.empty() ? std::string("ayarlar") : file;
+    std::string out = file.empty() ? std::string(loc("settings", "ayarlar")) : file;
     if (line > 0) {
         out += ":" + std::to_string(line);
         if (column > 0) out += ":" + std::to_string(column);
     }
-    out += severity == Severity::Error ? ": hata: " : ": uyarı: ";
+    out += severity == Severity::Error ? loc(": error: ", ": hata: ") : loc(": warning: ", ": uyarı: ");
     if (!key.empty()) out += "'" + key + "': ";
     out += message;
     return out;
@@ -216,18 +222,18 @@ bool valid_color(std::string_view s) {
 const char* kind_name(Kind k) {
     switch (k) {
         case Kind::Bool: return "true/false";
-        case Kind::Int: return "tam sayı";
-        case Kind::Float: return "sayı";
-        case Kind::String: return "metin";
-        case Kind::Enum: return "seçenek";
-        case Kind::Path: return "yol";
-        case Kind::Hotkey: return "kısayol";
-        case Kind::Color: return "renk";
-        case Kind::Duration: return "süre";
-        case Kind::StringList: return "metin listesi";
-        case Kind::PathList: return "yol listesi";
-        case Kind::GlobList: return "desen listesi";
-        case Kind::ObjectList: return "nesne listesi";
+        case Kind::Int: return loc("an integer", "tam sayı");
+        case Kind::Float: return loc("a number", "sayı");
+        case Kind::String: return loc("text", "metin");
+        case Kind::Enum: return loc("a choice", "seçenek");
+        case Kind::Path: return loc("a path", "yol");
+        case Kind::Hotkey: return loc("a hotkey", "kısayol");
+        case Kind::Color: return loc("a color", "renk");
+        case Kind::Duration: return loc("a duration", "süre");
+        case Kind::StringList: return loc("a list of text", "metin listesi");
+        case Kind::PathList: return loc("a list of paths", "yol listesi");
+        case Kind::GlobList: return loc("a list of patterns", "desen listesi");
+        case Kind::ObjectList: return loc("a list of objects", "nesne listesi");
     }
     return "?";
 }
@@ -263,14 +269,14 @@ public:
             ryml::ConstNodeRef root = tree.crootref();
             if (root.is_stream()) {
                 if (root.num_children() == 0) return result;
-                if (root.num_children() > 1) warn(root, "", "dosyada birden fazla YAML belgesi var; sadece ilki okunur");
+                if (root.num_children() > 1) warn(root, "", loc("the file has more than one YAML document; only the first is read", "dosyada birden fazla YAML belgesi var; sadece ilki okunur"));
                 root = root.first_child();
             }
             if (!root.is_container() && (!root.has_val() || is_null_scalar(to_std(root.val())))) {
                 return result;  // empty document (only comments, or "~")
             }
             if (!root.is_map()) {
-                error(root, "", "dosyanın en üst seviyesi anahtar: değer eşlemesi olmalı");
+                error(root, "", loc("the top level of the file must be a key: value mapping", "dosyanın en üst seviyesi anahtar: değer eşlemesi olmalı"));
                 result.diagnostics = std::move(diags_);
                 return result;
             }
@@ -282,7 +288,7 @@ public:
             d.file = filename_;
             d.line = static_cast<int>(e.line) + 1;
             d.column = static_cast<int>(e.col) + 1;
-            d.message = "YAML sözdizimi hatası: " + e.message;
+            d.message = std::string(loc("YAML syntax error: ", "YAML sözdizimi hatası: ")) + e.message;
             diags_.push_back(std::move(d));
             result.parse_failed = true;
             result.settings = defaults(schema_);
@@ -335,7 +341,7 @@ private:
             const std::string name = to_std(child.key());
             const std::string key = prefix.empty() ? name : prefix + "." + name;
             if (std::find(seen.begin(), seen.end(), name) != seen.end())
-                warn(child, key, "anahtar birden fazla kez yazılmış; sonuncusu geçerli");
+                warn(child, key, loc("key written more than once; the last one wins", "anahtar birden fazla kez yazılmış; sonuncusu geçerli"));
             seen.push_back(name);
 
             if (const SettingDef* def = schema_.find(key)) {
@@ -347,13 +353,13 @@ private:
                 if (child.is_map()) {
                     walk_map(child, key, out);
                 } else if (!(child.has_val() && is_null_scalar(std::string_view(child.val().data(), child.val().size())))) {
-                    error(child, key, "bu bir bölüm; altında anahtar: değer satırları olmalı");
+                    error(child, key, loc("this is a section; it needs key: value lines below it", "bu bir bölüm; altında anahtar: değer satırları olmalı"));
                 }
                 continue;
             }
-            std::string msg = "bilinmeyen ayar";
+            std::string msg = loc("unknown setting", "bilinmeyen ayar");
             const std::string s = suggestion(key);
-            if (!s.empty()) msg += " (şunu mu demek istediniz: '" + s + "'?)";
+            if (!s.empty()) msg += std::string(loc(" (did you mean '", " (şunu mu demek istediniz: '")) + s + "'?)";
             warn(child, key, msg);
         }
     }
@@ -368,20 +374,20 @@ private:
             if (node.is_seq()) {
                 for (ryml::ConstNodeRef item : node.children()) {
                     if (item.is_container()) {
-                        error(item, key, "liste elemanı düz bir değer olmalı");
+                        error(item, key, loc("list items must be plain values", "liste elemanı düz bir değer olmalı"));
                         return false;
                     }
                     std::string s(trim(to_std(item.val())));
                     if (def.kind == Kind::PathList && item.is_val_dquo() && has_control_chars(s))
-                        warn(item, key, "çift tırnak içinde \\ kaçış karakteridir; Windows yolları için tek tırnak kullanın");
+                        warn(item, key, loc("inside double quotes \\ is an escape character; use single quotes for Windows paths", "çift tırnak içinde \\ kaçış karakteridir; Windows yolları için tek tırnak kullanın"));
                     if (s.empty()) {
-                        warn(item, key, "boş liste elemanı yok sayıldı");
+                        warn(item, key, loc("empty list item ignored", "boş liste elemanı yok sayıldı"));
                         continue;
                     }
                     list.push_back(std::move(s));
                 }
             } else if (node.is_map()) {
-                error(node, key, std::string("beklenen: ") + kind_name(def.kind));
+                error(node, key, std::string(loc("expected ", "beklenen: ")) + kind_name(def.kind));
                 return false;
             } else {
                 const std::string s(trim(to_std(node.val())));
@@ -392,7 +398,7 @@ private:
         }
 
         if (node.is_container()) {
-            error(node, key, std::string("beklenen: ") + kind_name(def.kind) + ", liste/eşleme değil");
+            error(node, key, std::string(loc("expected ", "beklenen: ")) + kind_name(def.kind) + loc(", not a list or mapping", ", liste/eşleme değil"));
             return false;
         }
         const std::string raw(trim(to_std(node.val())));
@@ -414,26 +420,28 @@ private:
                 const std::string l = to_lower_ascii(raw);
                 if (l == "true" || l == "yes" || l == "on" || l == "evet" || l == "açık") *out = Value(true);
                 else if (l == "false" || l == "no" || l == "off" || l == "hayır" || l == "kapalı") *out = Value(false);
-                else return bad("true veya false olmalı, '" + raw + "' yazılmış");
+                else return bad(std::string(loc("must be true or false, got '", "true veya false olmalı, '")) + raw + loc("'", "' yazılmış"));
                 return true;
             }
             case Kind::Int: {
                 char* end = nullptr;
                 errno = 0;
                 const long long v = std::strtoll(raw.c_str(), &end, 10);
-                if (end == raw.c_str() || *end != '\0' || errno == ERANGE) return bad("tam sayı olmalı, '" + raw + "' yazılmış");
+                if (end == raw.c_str() || *end != '\0' || errno == ERANGE) return bad(std::string(loc("must be an integer, got '", "tam sayı olmalı, '")) + raw + loc("'", "' yazılmış"));
                 if (v < def.min || v > def.max)
-                    return bad(std::to_string(def.min) + " ile " + std::to_string(def.max) + " arasında olmalı (" + raw + ")");
+                    return bad(std::string(loc("must be between ", "")) + std::to_string(def.min) + loc(" and ", " ile ") + std::to_string(def.max) +
+                               loc("", " arasında olmalı") + " (" + raw + ")");
                 *out = Value(static_cast<int64_t>(v));
                 return true;
             }
             case Kind::Float: {
                 char* end = nullptr;
                 const double v = std::strtod(raw.c_str(), &end);
-                if (end == raw.c_str() || *end != '\0') return bad("sayı olmalı, '" + raw + "' yazılmış");
+                if (end == raw.c_str() || *end != '\0') return bad(std::string(loc("must be a number, got '", "sayı olmalı, '")) + raw + loc("'", "' yazılmış"));
                 if ((def.min != INT64_MIN && v < static_cast<double>(def.min)) ||
                     (def.max != INT64_MAX && v > static_cast<double>(def.max)))
-                    return bad(std::to_string(def.min) + " ile " + std::to_string(def.max) + " arasında olmalı");
+                    return bad(std::string(loc("must be between ", "")) + std::to_string(def.min) + loc(" and ", " ile ") + std::to_string(def.max) +
+                               loc("", " arasında olmalı"));
                 *out = Value(v);
                 return true;
             }
@@ -446,7 +454,7 @@ private:
                 }
                 std::string all;
                 for (const auto& c : def.choices) all += (all.empty() ? "" : " | ") + c;
-                return bad("geçersiz seçenek '" + raw + "'; geçerli: " + all);
+                return bad(std::string(loc("invalid choice '", "geçersiz seçenek '")) + raw + loc("'; valid: ", "'; geçerli: ") + all);
             }
             case Kind::Hotkey: {
                 std::string err;
@@ -456,28 +464,30 @@ private:
                 return true;
             }
             case Kind::Color: {
-                if (!valid_color(raw)) return bad("renk 'auto' veya #RRGGBB biçiminde olmalı, '" + raw + "' yazılmış");
+                if (!valid_color(raw)) return bad(std::string(loc("a color must be 'auto' or #RRGGBB, got '", "renk 'auto' veya #RRGGBB biçiminde olmalı, '")) + raw +
+                                                   loc("'", "' yazılmış"));
                 *out = Value(to_lower_ascii(raw));
                 return true;
             }
             case Kind::Duration: {
                 int64_t ms = 0;
-                if (!parse_duration(raw, &ms)) return bad("süre 250ms, 30s, 5m, 1h veya 2d biçiminde olmalı");
+                if (!parse_duration(raw, &ms)) return bad(loc("a duration looks like 250ms, 30s, 5m, 1h or 2d", "süre 250ms, 30s, 5m, 1h veya 2d biçiminde olmalı"));
                 if (ms < def.min || ms > def.max)
-                    return bad(format_duration(def.min) + " ile " + format_duration(def.max) + " arasında olmalı");
+                    return bad(std::string(loc("must be between ", "")) + format_duration(def.min) + loc(" and ", " ile ") + format_duration(def.max) +
+                               loc("", " arasında olmalı"));
                 *out = Value(ms);
                 return true;
             }
             case Kind::Path:
                 if (node.is_val_dquo() && has_control_chars(raw))
-                    warn(node, key, "çift tırnak içinde \\ kaçış karakteridir (\\n, \\t ...); Windows yolları için tek tırnak kullanın");
+                    warn(node, key, loc("inside double quotes \\ is an escape character (\\n, \\t ...); use single quotes for Windows paths", "çift tırnak içinde \\ kaçış karakteridir (\\n, \\t ...); Windows yolları için tek tırnak kullanın"));
                 *out = Value(raw);
                 return true;
             case Kind::String:
                 *out = Value(raw);
                 return true;
             default:
-                return bad("desteklenmeyen tür");
+                return bad(loc("unsupported type", "desteklenmeyen tür"));
         }
     }
 
@@ -488,14 +498,14 @@ private:
                 *out = Value(std::move(objects));
                 return true;
             }
-            error(node, key, "liste olmalı (her eleman '- alan: değer' biçiminde)");
+            error(node, key, loc("must be a list (each item as '- field: value')", "liste olmalı (her eleman '- alan: değer' biçiminde)"));
             return false;
         }
         size_t index = 0;
         for (ryml::ConstNodeRef item : node.children()) {
             const std::string item_key = key + "[" + std::to_string(index++) + "]";
             if (!item.is_map()) {
-                error(item, item_key, "eleman bir eşleme olmalı ({ alan: değer, ... })");
+                error(item, item_key, loc("each item must be a mapping ({ field: value, ... })", "eleman bir eşleme olmalı ({ alan: değer, ... })"));
                 continue;
             }
             Object obj;
@@ -504,7 +514,7 @@ private:
                 const std::string fname = to_std(f.key());
                 auto it = std::find_if(def.fields.begin(), def.fields.end(), [&](const SettingDef& fd) { return fd.key == fname; });
                 if (it == def.fields.end()) {
-                    warn(f, item_key + "." + fname, "bilinmeyen alan");
+                    warn(f, item_key + "." + fname, loc("unknown field", "bilinmeyen alan"));
                     continue;
                 }
                 Value v;
@@ -517,7 +527,7 @@ private:
             for (const auto& fd : def.fields) {
                 if (obj.find(fd.key)) continue;
                 if (fd.required) {
-                    error(item, item_key, "zorunlu alan eksik: '" + fd.key + "'");
+                    error(item, item_key, std::string(loc("required field missing: '", "zorunlu alan eksik: '")) + fd.key + "'");
                     ok = false;
                 } else {
                     obj.fields.emplace_back(fd.key, fd.def);
@@ -696,8 +706,8 @@ std::string json_value(const SettingDef& def, const Value& v) {
 std::string json_type(const SettingDef& def, const std::string& indent);
 
 std::string json_leaf(const SettingDef& def, const std::string& indent) {
-    std::string desc = def.title;
-    if (!def.description.empty()) desc += desc.empty() ? def.description : " — " + def.description;
+    std::string desc = setting_title(def);
+    if (!setting_description(def).empty()) desc += desc.empty() ? setting_description(def) : " — " + setting_description(def);
     std::string out = "{\n";
     out += indent + "  \"description\": \"" + json_escape(desc) + "\",\n";
     out += indent + "  " + json_type(def, indent + "  ");
@@ -780,13 +790,19 @@ void json_emit_object(std::string& out, const JsonNode& node, const Schema& sche
 std::string generate_default_yaml(const Schema& schema, std::string_view schema_ref) {
     std::string out;
     if (!schema_ref.empty()) out += "# yaml-language-server: $schema=" + std::string(schema_ref) + "\n";
-    out +=
+    out += loc(
+        "# Kamil settings\n"
+        "#\n"
+        "# This file is reloaded as soon as it is saved. An invalid value falls back to its default and\n"
+        "# is reported in the tray with its line number. Write Windows paths in single quotes:\n"
+        "#   'D:\\src\\project'   (inside double quotes \\ is an escape character)\n"
+        "# Any setting that is deleted or commented out returns to its default.\n",
         "# Kamil ayarları\n"
         "#\n"
         "# Bu dosya kaydedildiği anda yeniden yüklenir. Hatalı bir değer varsayılanına döner ve\n"
         "# tray simgesinde satır numarasıyla bildirilir. Windows yollarını tek tırnakla yazın:\n"
         "#   'D:\\src\\proje'   (çift tırnak içinde \\ kaçış karakteridir)\n"
-        "# Silinen veya yorum satırı yapılan her ayar varsayılan değerine döner.\n";
+        "# Silinen veya yorum satırı yapılan her ayar varsayılan değerine döner.\n");
 
     std::vector<std::string_view> open;  // currently open map path
     for (const auto& def : schema.all()) {
@@ -805,11 +821,12 @@ std::string generate_default_yaml(const Schema& schema, std::string_view schema_
             open.push_back(parts[i]);
         }
         const std::string indent((parts.size() - 1) * 2, ' ');
-        std::string comment = def.title;
-        if (!def.description.empty()) comment += comment.empty() ? def.description : " — " + def.description;
+        std::string comment = setting_title(def);
+        const std::string& desc = setting_description(def);
+        if (!desc.empty()) comment += comment.empty() ? desc : " — " + desc;
         const std::string extra = describe(def);
         if (!extra.empty()) comment += "\n(" + extra + ")";
-        if (def.apply == Apply::Restart) comment += "\nDeğişiklik için Kamil'i yeniden başlatın.";
+        if (def.apply == Apply::Restart) comment += loc("\nRestart Kamil for a change to take effect.", "\nDeğişiklik için Kamil'i yeniden başlatın.");
         out += "\n";
         write_comment_block(out, indent, comment);
         const std::string inline_value = value_to_yaml_inline(def, def.def);
@@ -828,11 +845,11 @@ std::string generate_default_yaml(const Schema& schema, std::string_view schema_
             out += indent + std::string(parts.back()) + ": " + inline_value + "\n";
         }
         if (def.kind == Kind::ObjectList && !def.fields.empty()) {
-            std::string example = "Örnek:\n" + std::string(parts.back()) + ":\n";
+            std::string example = std::string(loc("Example:\n", "Örnek:\n")) + std::string(parts.back()) + ":\n";
             bool first = true;
             for (const auto& fd : def.fields) {
                 example += (first ? "  - " : "    ") + fd.key + ": " +
-                           (fd.description.empty() ? std::string("...") : fd.description) + "\n";
+                           (setting_description(fd).empty() ? std::string("...") : setting_description(fd)) + "\n";
                 first = false;
             }
             write_comment_block(out, indent, example);

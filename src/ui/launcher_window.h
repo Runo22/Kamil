@@ -67,6 +67,8 @@ public:
     uint64_t hidden_at() const { return hidden_at_; }
     const std::wstring& query() const { return edit_.text(); }
     bool in_action_panel() const { return mode_ != Mode::Results; }
+    // The item whose action panel / pick list is open, or nullptr.
+    const Item* action_parent() const { return mode_ == Mode::Actions && visible() ? &action_parent_ : nullptr; }
 
     // Shows `items` as a pickable list for `parent` (an action panel with custom content).
     void show_list(const Item& parent, std::vector<Item> items, std::wstring placeholder);
