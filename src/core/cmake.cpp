@@ -1,6 +1,7 @@
 #include "core/cmake.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -488,7 +489,59 @@ bool parse_issue(std::string_view line, BuildIssue* out) {
     return false;
 }
 
+// GCC / Clang: "path:line[:col]: error: message" (path may start with a drive letter).
+bool parse_gcc_issue(std::string_view line, BuildIssue* out) {
+    struct Marker {
+        std::string_view text;
+        bool error;
+    };
+    static constexpr Marker kMarkers[] = {{": fatal error: ", true}, {": error: ", true}, {": warning: ", false}};
+    for (const auto& m : kMarkers) {
+        const size_t pos = line.find(m.text);
+        if (pos == std::string_view::npos) continue;
+        std::string_view prefix = trim(line.substr(0, pos));
+        int numbers[2] = {0, 0};
+        int count = 0;
+        // Up to two trailing ":<digits>" groups: line and column.
+        while (count < 2) {
+            const size_t colon = prefix.rfind(':');
+            if (colon == std::string_view::npos || colon + 1 == prefix.size()) break;
+            const std::string_view digits = prefix.substr(colon + 1);
+            if (!std::all_of(digits.begin(), digits.end(), [](char c) { return c >= '0' && c <= '9'; })) break;
+            numbers[count++] = std::atoi(std::string(digits).c_str());
+            prefix = prefix.substr(0, colon);
+        }
+        if (count == 0 || prefix.empty()) return false;
+        BuildIssue issue;
+        issue.error = m.error;
+        issue.file = std::string(prefix);
+        issue.line = count == 2 ? numbers[1] : numbers[0];
+        issue.message = std::string(trim(line.substr(pos + m.text.size())));
+        *out = std::move(issue);
+        return true;
+    }
+    return false;
+}
+
 }  // namespace
+
+std::optional<BuildIssue> parse_build_line(std::string_view line) {
+    BuildIssue issue;
+    const std::string_view t = trim(line);
+    // Python traceback: File "C:\x\tool.py", line 12, in main
+    if (t.substr(0, 6) == "File \"") {
+        const size_t close = t.find('"', 6);
+        const size_t at = t.find(", line ", close == std::string_view::npos ? 0 : close);
+        if (close != std::string_view::npos && at != std::string_view::npos) {
+            issue.file = std::string(t.substr(6, close - 6));
+            issue.line = std::atoi(std::string(t.substr(at + 7)).c_str());
+            issue.code = "trace";
+            return issue;
+        }
+    }
+    if (parse_gcc_issue(line, &issue) || parse_issue(line, &issue)) return issue;
+    return std::nullopt;
+}
 
 BuildSummary summarize_build_log(std::string_view log) {
     BuildSummary s;

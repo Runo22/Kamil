@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <map>
 #include <memory>
 #include <thread>
@@ -16,6 +17,7 @@
 #include "core/search.h"
 #include "core/settings.h"
 #include "core/usage.h"
+#include "platform/child_process.h"
 #include "platform/com_ports.h"
 #include "platform/file_watcher.h"
 #include "platform/icon_loader.h"
@@ -26,6 +28,7 @@
 #include "platform/vs_bridge.h"
 #include "providers/apps_provider.h"
 #include "providers/repo_provider.h"
+#include "ui/console_window.h"
 #include "ui/launcher_window.h"
 
 namespace kamil {
@@ -106,6 +109,20 @@ private:
     std::map<std::string, std::string> placeholder_values(const std::wstring& input);
     void set_last_project(const std::wstring& root);
     void load_last_project();
+
+    // Console (app_console.cpp)
+    void create_console();
+    void update_console_theme();
+    void show_console(bool activate);
+    // Runs a program with its output in a console tab. `rerun` repeats it (Run again / F5);
+    // with `notify_name` the result is also reported as a notification.
+    uint64_t start_in_console(const std::wstring& title, const std::wstring& detail, const std::wstring& root, const std::wstring& exe,
+                              const std::wstring& args, const std::wstring& dir, std::function<void()> rerun,
+                              const std::wstring& notify_name = {});
+    void on_console_output(const ConsoleOutput& out);
+    void on_vs_job_console(const VsEvent& e);
+    void open_location(const ConsoleTab& tab, const std::wstring& file, int line);
+    void open_in_code(const std::wstring& file, int line);
 
     // Diagnostics (app_diagnostics.cpp)
     void report_crashes();
@@ -210,6 +227,17 @@ private:
     std::vector<int> command_hotkey_ids_;
     std::wstring failed_command_hotkeys_;
     std::wstring last_project_;  // CMake project acted on last: target of action commands
+
+    ConsoleWindow console_;
+    struct ConsoleRun {
+        std::unique_ptr<ChildProcess> proc;  // programs Kamil started for the tab
+        std::function<void()> rerun;
+        uint64_t vs_job = 0;                 // build tabs: the VS job behind it (Stop cancels it)
+        std::wstring notify_name;
+    };
+    std::unordered_map<uint64_t, ConsoleRun> console_runs_;  // by tab id
+    std::unordered_map<uint64_t, uint64_t> job_tabs_;        // VS job id -> tab id
+    std::unordered_map<uint64_t, std::pair<std::wstring, int>> pending_goto_;  // GoTo job -> file, line
     std::thread warm_;  // pre-reads CMake presets and File API replies so Ctrl+K opens instantly
     std::atomic<bool> warm_cancel_{false};
 

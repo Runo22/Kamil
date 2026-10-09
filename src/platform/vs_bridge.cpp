@@ -26,6 +26,7 @@ const wchar_t* vs_job_verb(VsJob::Kind kind) {
         case VsJob::Kind::Reconfigure: return L"Reconfigure";
         case VsJob::Kind::Debug: return L"Debug";
         case VsJob::Kind::Diagnose: return L"Diagnose";
+        case VsJob::Kind::GoTo: return L"Go to";
     }
     return L"";
 }
@@ -290,6 +291,15 @@ struct Context {
         e->text = text;
         post_owned(target, WM_KAMIL_VS_EVENT, e);
     }
+    void output(std::wstring text) const {
+        if (text.empty()) return;
+        auto* e = new VsEvent;
+        e->type = VsEvent::Type::Output;
+        e->job = job_id;
+        e->kind = job.kind;
+        e->text = std::move(text);
+        post_owned(target, WM_KAMIL_VS_EVENT, e);
+    }
 };
 
 long build_state(Disp& dte) {
@@ -507,14 +517,13 @@ Variant as_variant(const Disp& d) {
     return v;
 }
 
-// Whole pane text (read once, at the end of a build).
-std::wstring pane_text(Disp& pane) {
+// The first characters of the pane: they change when VS clears it for a new build.
+std::wstring pane_head(Disp& pane) {
     if (!pane.valid()) return {};
     try {
-        Disp doc = pane.get(L"TextDocument");
-        Disp start = doc.get(L"StartPoint").get(L"CreateEditPoint");
-        const Variant end = as_variant(doc.get(L"EndPoint"));
-        return start.invoke(L"GetText", {&end}, DISPATCH_METHOD).as_string();
+        Disp start = pane.get(L"TextDocument").get(L"StartPoint").get(L"CreateEditPoint");
+        const Variant count = Variant::i4(80);
+        return start.invoke(L"GetText", {&count}, DISPATCH_METHOD).as_string();
     } catch (const ComError&) {
         return {};
     }
@@ -527,6 +536,21 @@ long pane_length(Disp& pane) {
         return pane.get(L"TextDocument").get(L"EndPoint").get_long(L"AbsoluteCharOffset");
     } catch (const ComError&) {
         return -1;
+    }
+}
+
+// Pane text from a 1-based character offset to the end.
+std::wstring pane_text_from(Disp& pane, long offset) {
+    if (!pane.valid()) return {};
+    try {
+        Disp doc = pane.get(L"TextDocument");
+        Disp from = doc.get(L"StartPoint").get(L"CreateEditPoint");
+        const Variant at = Variant::i4(std::max(1L, offset));
+        from.invoke(L"MoveToAbsoluteOffset", {&at}, DISPATCH_METHOD);
+        const Variant end = as_variant(doc.get(L"EndPoint"));
+        return from.invoke(L"GetText", {&end}, DISPATCH_METHOD).as_string();
+    } catch (const ComError&) {
+        return {};
     }
 }
 
@@ -562,15 +586,32 @@ BuildSummary run_build(const Context& ctx, Disp& dte, VsJob::Kind kind, const st
         pane = find_build_pane(dte);
     } catch (const ComError&) {
     }
-    const size_t before = pane_text(pane).size();
+    // Output is streamed to the console from `streamed` (a 1-based pane offset) on. VS clears
+    // the pane when the build starts: a changed beginning of the pane means "read from the top".
+    long streamed = pane.valid() ? pane_length(pane) : 1;
+    std::wstring head = pane_head(pane);
+    std::wstring log;  // this build's output, for the summary
+    auto stream = [&] {
+        if (!pane.valid()) return;
+        const long len = pane_length(pane);
+        const std::wstring now_head = pane_head(pane);
+        if (len < streamed || now_head != head) {
+            streamed = 1;
+            head = now_head;
+        }
+        if (len <= streamed) return;
+        std::wstring chunk = pane_text_from(pane, streamed);
+        streamed = len;
+        log += chunk;
+        ctx.output(std::move(chunk));
+    };
 
     const std::wstring used = execute_command(ctx, dte, build_commands(kind), nullptr);
     const ULONGLONG start = GetTickCount64();
     ctx.progress(fmt(loc(L"{} running…", L"{} sürüyor…"), verb));
 
     bool saw_progress = false, saw_output = false;
-    const long first_len = pane_length(pane);
-    long last_len = first_len;
+    long last_len = pane_length(pane);
     ULONGLONG last_change = GetTickCount64();
     for (;;) {
         if (ctx.cancelled()) {
@@ -578,6 +619,7 @@ BuildSummary run_build(const Context& ctx, Disp& dte, VsJob::Kind kind, const st
                 execute_now(dte, L"Build.Cancel");
             } catch (const ComError&) {
             }
+            stream();
             ctx.check();
         }
         Sleep(300);
@@ -586,7 +628,8 @@ BuildSummary run_build(const Context& ctx, Disp& dte, VsJob::Kind kind, const st
         if (saw_progress && state == kDone) break;
         if (!pane.valid()) {
             try {
-                pane = find_build_pane(dte);
+                pane = find_build_pane(dte);  // created by the first build of the session
+                streamed = 1;
             } catch (const ComError&) {
             }
         }
@@ -596,6 +639,7 @@ BuildSummary run_build(const Context& ctx, Disp& dte, VsJob::Kind kind, const st
             last_len = len;
             last_change = now;
             saw_output = true;
+            stream();
             if (!saw_progress) {
                 const std::wstring tail = pane_tail(pane, 200);
                 if (tail.find(L"All succeeded") != std::wstring::npos || tail.find(L"All failed") != std::wstring::npos) break;
@@ -615,10 +659,9 @@ BuildSummary run_build(const Context& ctx, Disp& dte, VsJob::Kind kind, const st
         if (now - start > 60ull * 60 * 1000)
             throw ComError{E_FAIL, fmt(loc(L"{} did not finish within 60 minutes", L"{} 60 dakikada bitmedi"), verb)};
     }
-
-    std::wstring text = pane_text(pane);
-    if (text.size() >= before) text.erase(0, before);  // only this build's output (pane may also be cleared)
-    return summarize_build_log(narrow(text));
+    Sleep(200);  // the last lines ("Build All succeeded") may land just after the state change
+    stream();
+    return summarize_build_log(narrow(log));
 }
 
 std::wstring summary_line(const std::wstring& verb, const BuildSummary& s, ULONGLONG ms) {
@@ -747,6 +790,33 @@ void diagnose(const Context& ctx, VsEvent& result) {
     result.text = loc(L"VS connection report ready", L"VS bağlantı raporu hazır");
 }
 
+// Opens job.file at job.line in the instance that has job.folder open. Never starts Visual
+// Studio: without such an instance the caller opens the file elsewhere.
+void goto_location(const Context& ctx, VsEvent& result) {
+    const VsJob& job = ctx.job;
+    const std::wstring folder = normalize(job.folder);
+    const std::wstring folder_name = lower(std::filesystem::path(job.folder).filename().wstring());
+    const auto instances = all_instances(job.dte_version);
+    const auto windows = devenv_windows();
+    std::wstring how;
+    const std::map<std::wstring, DWORD> none;
+    const int i = job.folder.empty() ? -1 : match_instance(instances, folder, folder_name, none, windows, &how);
+    if (i < 0) {
+        result.text = L"no Visual Studio instance has the folder open";
+        return;
+    }
+    Disp dte = instances[static_cast<size_t>(i)].dte;
+    const Variant file = Variant::str(job.file);
+    dte.get(L"ItemOperations").invoke(L"OpenFile", {&file}, DISPATCH_METHOD);
+    if (job.line > 0) {
+        const Variant line = Variant::i4(job.line);
+        const Variant select = Variant::i4(0);
+        dte.get(L"ActiveDocument").get(L"Selection").invoke(L"GotoLine", {&line, &select}, DISPATCH_METHOD);
+    }
+    activate(dte);
+    result.ok = true;
+}
+
 struct ComScope {
     HRESULT hr;
     RetryFilter filter;
@@ -791,8 +861,8 @@ uint64_t VsBridge::submit(VsJob job) {
     {
         std::lock_guard lock(mutex_);
         id = next_id_++;
-        if (job.kind == VsJob::Kind::Diagnose) {
-            // Own thread: the connection test must also work while a job waits for VS.
+        if (job.kind == VsJob::Kind::Diagnose || job.kind == VsJob::Kind::GoTo) {
+            // Own thread: these must also work while a build runs or a job waits for VS.
             const HWND target = target_;
             side_threads_.emplace_back([target, id, job = std::move(job)] {
                 ComScope com;
@@ -803,7 +873,8 @@ uint64_t VsBridge::submit(VsJob job) {
                 result->job = id;
                 result->kind = job.kind;
                 try {
-                    diagnose(ctx, *result);
+                    if (job.kind == VsJob::Kind::GoTo) goto_location(ctx, *result);
+                    else diagnose(ctx, *result);
                 } catch (const ComError& e) {
                     result->text = e.what;
                 }

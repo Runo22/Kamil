@@ -41,6 +41,7 @@ enum MenuId : UINT {
     IDM_ISSUES,
     IDM_RESCAN,
     IDM_JOBS,
+    IDM_CONSOLE,
     IDM_CANCEL_JOBS,
     IDM_LOG,
     IDM_EXIT,
@@ -65,6 +66,8 @@ constexpr BuiltinCommand kCommands[] = {
      L"Uygulamalar, git depoları ve aranacak klasörlerdeki dosyalar"},
     {L"jobs", L"Kamil: VS jobs", L"Kamil: VS işleri", L"Running and queued Visual Studio jobs; cancel them here",
      L"Çalışan ve sırada bekleyen Visual Studio işleri; buradan iptal edilir"},
+    {L"console", L"Kamil: Console", L"Kamil: Konsol", L"Output of programs run by Kamil and of Visual Studio builds; F8 jumps to errors",
+     L"Kamil'in çalıştırdığı programların ve Visual Studio build'lerinin çıktısı; F8 hatalara gider"},
     {L"forget", L"Kamil: Forget what was learned", L"Kamil: Öğrenilenleri sıfırla", L"Clears frequently used items and search preferences",
      L"Sık kullanılanlar ve arama tercihleri silinir"},
     {L"vs-diagnose", L"Kamil: Test VS connection", L"Kamil: VS bağlantısını test et",
@@ -155,6 +158,7 @@ int App::run(HINSTANCE instance, bool autostart) {
         return 1;
     }
 
+    create_console();
     usage_.load(paths_.usage_file());
     load_last_project();
     apps_ = AppsProvider::load_cache(paths_.apps_cache_file());
@@ -190,6 +194,7 @@ int App::run(HINSTANCE instance, bool autostart) {
         warm_.join();
     }
     fs_watcher_.stop();
+    console_.destroy();
     vs_.reset();
     git_.reset();
     icon_loader_.reset();
@@ -292,6 +297,7 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
     style.accent = s.get_string(keys::kAccent);
     style.footer = s.get_bool(keys::kFooter);
     launcher_.apply_style(style);
+    if (touched("appearance")) update_console_theme();
 
     search_options_.limit = static_cast<size_t>(s.get_int(keys::kMaxResults));
     search_options_.frequent_when_empty = s.get_bool(keys::kShowFrequent);
@@ -507,6 +513,8 @@ void App::run_command(const std::wstring& id) {
                loc(L"The report opens in a few seconds.", L"Rapor birkaç saniye içinde açılacak."), Tray::Balloon::Info);
     } else if (id == L"jobs") {
         show_jobs();
+    } else if (id == L"console") {
+        show_console(true);
     } else if (id == L"diagnostics") {
         write_diagnostics();
     } else if (id == L"log") {
@@ -850,6 +858,7 @@ void App::show_tray_menu(POINT at) {
         AppendMenuW(menu, MF_STRING, IDM_ISSUES, issues.c_str());
     }
     AppendMenuW(menu, MF_STRING, IDM_RESCAN, loc(L"Rescan apps and files", L"Uygulamaları ve dosyaları yeniden tara"));
+    AppendMenuW(menu, MF_STRING, IDM_CONSOLE, loc(L"Console", L"Konsol"));
     AppendMenuW(menu, MF_STRING, IDM_LOG, loc(L"Open log", L"Günlüğü aç"));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, IDM_EXIT, loc(L"Quit", L"Çıkış"));
@@ -873,6 +882,7 @@ void App::show_tray_menu(POINT at) {
             break;
         }
         case IDM_LOG: run_command(L"log"); break;
+        case IDM_CONSOLE: run_command(L"console"); break;
         case IDM_EXIT: run_command(L"quit"); break;
         default: break;
     }
@@ -960,6 +970,11 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_KAMIL_FILES_READY:
             on_files_ready(std::unique_ptr<FileIndex>(reinterpret_cast<FileIndex*>(lp)));
             return 0;
+        case WM_KAMIL_CONSOLE: {
+            std::unique_ptr<ConsoleOutput> out(reinterpret_cast<ConsoleOutput*>(lp));
+            on_console_output(*out);
+            return 0;
+        }
         case WM_KAMIL_FS_CHANGES: {
             std::unique_ptr<std::vector<FsChange>> changes(reinterpret_cast<std::vector<FsChange>*>(lp));
             on_fs_changes(*changes);
@@ -1014,11 +1029,14 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         case WM_SETTINGCHANGE:
-            if (lp && std::wstring_view(reinterpret_cast<const wchar_t*>(lp)) == L"ImmersiveColorSet")
+            if (lp && std::wstring_view(reinterpret_cast<const wchar_t*>(lp)) == L"ImmersiveColorSet") {
                 launcher_.on_system_theme_changed();
+                update_console_theme();
+            }
             return 0;
         case WM_DWMCOLORIZATIONCOLORCHANGED:  // accent color changed
             launcher_.on_system_theme_changed();
+            update_console_theme();
             return 0;
         case WM_ENDSESSION:
             if (wp && usage_.dirty()) usage_.save(paths_.usage_file());

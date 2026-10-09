@@ -222,6 +222,17 @@ Schema build() {
     s.add(def(keys::kVsReconfigureCommand, Kind::String, "", {"VS delete cache + reconfigure command", "VS önbelleği sil + yeniden yapılandır komutu"},
               {"Empty: found automatically (a command containing DeleteCache)", "Boş: otomatik bulunur (adında DeleteCache geçen komut)"}));
     {
+        s.add(choice(keys::kRunIn, {"kamil", "console"}, "kamil", {"Where programs run", "Programlar nerede çalışsın"},
+                     {"kamil: output in a tab of the Kamil Console (errors clickable, Run again, Stop) | console: their own console window "
+                      "(use it for programs that read keyboard input)",
+                      "kamil: çıktı Kamil Console'da bir sekmede (hatalar tıklanabilir, Tekrar çalıştır, Durdur) | console: kendi konsol "
+                      "penceresinde (klavyeden girdi okuyan programlar için)"}));
+        s.add(choice(keys::kConsoleOnBuild, {"on_error", "always", "never"}, "on_error", {"Show the console for builds", "Build'de konsolu göster"},
+                     {"The Build output of Visual Studio is always collected in a console tab; on_error shows the window when a build "
+                      "fails", "Visual Studio'nun Build çıktısı her zaman bir konsol sekmesinde toplanır; on_error pencereyi build "
+                      "başarısız olunca gösterir"}));
+    }
+    {
         auto d = ranged(keys::kVsWaitSeconds, 90, 5, 600, {"VS wait limit", "VS bekleme sınırı"},
                         {"Seconds Kamil waits for Visual Studio to start, or to enable a command (e.g. while CMake is generating), before giving up. Waiting jobs can be cancelled from 'Kamil: VS jobs'",
                          "Visual Studio açılana ya da bir komutu etkinleştirene kadar (ör. CMake hazırlanırken) en çok kaç saniye beklensin. Bekleyen işler 'Kamil: VS işleri' ile iptal edilebilir"});

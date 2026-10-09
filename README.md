@@ -33,7 +33,7 @@ Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 | Dosya indeksi canlı güncellenir (yeni script anında çıkar), diske önbelleklenir (açılışta hemen hazır) | ✓ |
 | Çökme dökümü (minidump) + **Kamil: Diagnostics** raporu (sürüm, indeks, arama hızı, VS, dökümler) | ✓ |
 | Özel komutlar + global kısayollar: `Ctrl+Alt+B` / `Ctrl+Alt+D` her yerden son projeyi derler / debug eder | ✓ |
-| Konsol penceresi (çıktıları Kamil içinde sekmeli gösterme) | sonra |
+| **Kamil Console**: çalıştırmalar, VS build çıktısı ve gizli komutlar sekmelerde; hatalar renkli, tıkla/F8 → VS'te o satır | ✓ |
 | Süreç araçları (kill, dosyayı kilitleyen süreç) | ertelendi (istenince) |
 | Ayarlar penceresi | ertelendi (istenince) |
 | Windows 11 Acrylic arka plan | sonraki adım (şu an iki sistemde de düz yüzey) |
@@ -136,6 +136,21 @@ eylemi nedenini yazar; `dev.devenv_path` ile yolu verin. Her VS adımı `kamil.l
 İlk kullanımda bir kez **Kamil: VS bağlantısını test et** komutunu çalıştırın: açık VS örneklerini, Output bölmelerini
 ve VS'teki CMake komutlarının adlarını içeren bir rapor açılır. Configure komutu otomatik bulunamazsa rapordaki adı
 `dev.vs_configure_command` ayarına yazın.
+
+## Kamil Console
+
+`Alt+R` ile çalıştırılan programların çıktısı, Visual Studio build'lerinin Build bölmesi ve `console: hidden`
+komutlar **Kamil Console** penceresinde sekme sekme toplanır (*Kamil: Console* veya tray menüsü):
+
+- Her preset/hedef kendi sekmesinde (`SensorUI [x64-debug]`, `SensorUI [x64-release]` yan yana); aynı iş tekrar
+  çalışınca biten sekmesi yeniden kullanılır.
+- MSVC, GCC/Clang hataları ve Python traceback satırları renkli; çift tıklama, `Enter` veya `F8`/`Shift+F8` dosyayı o
+  satırda açar: proje VS'te açıksa VS'te, değilse VS Code'da.
+- `F5` / *Run again* aynı çalıştırmayı tekrarlar, *Stop* Kamil'in başlattığı programı (build sekmesinde VS işini)
+  durdurur. `Ctrl+C` kopyalar (seçim yoksa tümü), `Ctrl+W` sekmeyi kapatır, `Ctrl+Tab` sekmeler arasında gezer.
+- Build başarısız olursa pencere kendiliğinden açılır ve ilk hata seçili gelir (`dev.console_on_build: on_error |
+  always | never`).
+- Klavyeden girdi okuyan programlar için `dev.run_in: console` eski davranışa (ayrı konsol penceresi) döner.
 
 ## Özel komutlar ve global kısayollar
 

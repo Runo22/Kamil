@@ -786,6 +786,7 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 | İki dilli arayüz (İngilizce / Türkçe, sistem diline göre), komutlar iki dilde de aranır | ✓ |
 | VS iş kuyruğu: görünür liste, iptal, sınırlı ve nedenli beklemeler, yönetici VS tespiti, `kamil.log` | ✓ |
 | Sağlamlaştırma: minidump + "Kamil: Diagnostics", dosya indeksinin canlı güncellenmesi (`ReadDirectoryChangesW`) + disk önbelleği, `kamil_bench` | ✓ |
+| Kamil Console: çalıştırma / VS build / gizli komut çıktıları sekmelerde, hata renklendirme (MSVC, GCC/Clang, Python), F8 / çift tık → VS'te satır (yoksa VS Code), Stop, Run again | ✓ |
 | Özel komutlar (`commands:`): `run` komut satırı veya son projede `action`, yer tutucular, global kısayollar (varsayılan `Ctrl+Alt+B` build, `Ctrl+Alt+D` debug) | ✓ |
 | Hız: File API önbelleği + arka planda ön okuma (Ctrl+K anında), yazarken daraltan + paralel dosya araması (200 bin dosyada tuş başı ~3–10 ms) | ✓ |
 | Eylem paneli, `Tab` tamamlama, alt bilgi çubuğu, iş durumu | ✓ |
@@ -812,7 +813,8 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 
 | İş | Neden | Büyüklük |
 |---|---|---|
-| Konsol penceresi: çalıştırma/build çıktıları sekmelerde, hata listesi → satıra git (VS / VS Code) | Farklı preset'leri "ayrı ayrı göster" isteğinin tam karşılığı | B |
+| ~~Konsol penceresi: çalıştırma/build çıktıları sekmelerde, hata → satıra git (VS / VS Code)~~ | Yapıldı (v1.2): Kamil Console | — |
+| Konsol: arama (Ctrl+F), satır kaydırma, ANSI renkleri, girdi gönderme | Gerçek kullanıma göre | K–O |
 | Hata kodu (`err 0x80070005`), hex/bin hesap (`= 0x1F<<3`) | C++ geliştirmede sık; küçük iş | K |
 | VS: IDE içi F5 modu (`launch.vs.json`), preset değiştirme (bulunabilirse) | Gerçek kullanım geri bildirimine göre | O |
 

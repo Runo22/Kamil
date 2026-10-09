@@ -226,26 +226,10 @@ void App::run_user_command(size_t index, const std::wstring* input) {
     const std::wstring cmd = tools_.cmd.empty() ? std::wstring(L"cmd.exe") : tools_.cmd;
 
     if (c.console == L"hidden" && !c.admin) {
-        // No window: run in the background and report the result.
-        const HWND target = hwnd_;
-        const std::wstring name = c.name;
-        std::thread([target, name, cmd, line, dir] {
-            auto r = run_capture(quote_arg(cmd) + L" /S /C \"" + line + L"\"", dir, 30 * 60 * 1000, true);
-            std::wstring text;
-            if (r) {
-                std::wstring out = widen(r->output);
-                while (!out.empty() && (out.back() == L'\n' || out.back() == L'\r')) out.pop_back();
-                const size_t cut = out.size() > 300 ? out.size() - 300 : 0;  // the end of the output says the most
-                text = out.substr(cut);
-            }
-            const bool ok = r && r->exit_code == 0 && !r->timed_out;
-            const std::wstring title = !r ? fmt(loc(L"{} could not be started", L"{} başlatılamadı"), name)
-                                     : ok ? fmt(loc(L"✓ {} done", L"✓ {} tamam"), name)
-                                          : fmt(loc(L"✗ {} failed (exit code {})", L"✗ {} başarısız (çıkış kodu {})"), name,
-                                                std::to_wstring(r->exit_code));
-            post_owned(target, WM_KAMIL_NOTIFY,
-                       new Notification{ok ? Notification::Level::Info : Notification::Level::Error, title, text});
-        }).detach();
+        // No window: the output goes into a console tab (not shown) and the result is a notification.
+        const std::wstring typed = input ? *input : std::wstring();
+        start_in_console(c.name, line, dir, cmd, L"/S /C \"" + line + L"\"", dir,
+                         [this, index, typed] { run_user_command(index, &typed); }, c.name);
         return;
     }
     const std::wstring args = std::wstring(c.console == L"close" || c.console == L"hidden" ? L"/S /C \"" : L"/S /K \"") + line + L"\"";

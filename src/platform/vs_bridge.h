@@ -26,7 +26,7 @@
 namespace kamil {
 
 struct VsJob {
-    enum class Kind { Build, Rebuild, Clean, Configure, Reconfigure, Debug, Diagnose };
+    enum class Kind { Build, Rebuild, Clean, Configure, Reconfigure, Debug, Diagnose, GoTo };
     Kind kind = Kind::Build;
     std::wstring folder;       // project root (Open Folder)
     std::wstring devenv;       // devenv.exe of the wanted version
@@ -41,13 +41,17 @@ struct VsJob {
     // Command names for Configure / Reconfigure; empty: discover from the DTE command table.
     std::wstring configure_command, reconfigure_command;
 
+    // GoTo: open a file at a line in the instance that has `folder` open (never opens a new one)
+    std::wstring file;
+    int line = 0;
+
     // Diagnose
     std::filesystem::path report_file;
     std::wstring tools_report;  // how devenv.exe was found
 };
 
 struct VsEvent {
-    enum class Type { Started, Progress, Finished };
+    enum class Type { Started, Progress, Output, Finished };  // Output: new Build pane text
     Type type = Type::Progress;
     uint64_t job = 0;
     VsJob::Kind kind = VsJob::Kind::Build;

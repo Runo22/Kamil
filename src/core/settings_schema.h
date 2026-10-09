@@ -52,6 +52,8 @@ inline constexpr const char* kDefaultArgs = "dev.default_args";
 inline constexpr const char* kVsConfigureCommand = "dev.vs_configure_command";
 inline constexpr const char* kVsReconfigureCommand = "dev.vs_reconfigure_command";
 inline constexpr const char* kVsWaitSeconds = "dev.vs_wait_seconds";
+inline constexpr const char* kRunIn = "dev.run_in";
+inline constexpr const char* kConsoleOnBuild = "dev.console_on_build";
 
 // Custom commands (a top-level list)
 inline constexpr const char* kCommands = "commands";

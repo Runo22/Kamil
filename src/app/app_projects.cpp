@@ -560,6 +560,14 @@ void App::run_project_exe(const Item& repo, const std::wstring& preset_override)
                Tray::Balloon::Warning);
         return;
     }
+    if (store_.current()->get_string(keys::kRunIn) == "kamil") {
+        const Item repo_copy = repo;
+        const std::wstring preset_copy = preset_override;
+        start_in_console(v.target_name() + L" [" + preset + L"]" + (v.com.empty() ? L"" : L" " + v.com), exe.wstring() + L"  " + v.args, repo.path,
+                         exe.wstring(), v.args, exe.parent_path().wstring(), [this, repo_copy, preset_copy] { run_project_exe(repo_copy, preset_copy); });
+        show_console(true);
+        return;
+    }
     const std::wstring title = L"Kamil ▸ " + v.target_name() + L" [" + preset + L"]" + (v.com.empty() ? L"" : L" " + v.com);
     std::wstring error;
     auto proc = launch_process(exe.wstring(), v.args, exe.parent_path().wstring(), title, false, &error);
@@ -626,6 +634,16 @@ void App::submit_vs(VsJob::Kind kind, const Item& repo) {
 }
 
 void App::on_vs_event(const VsEvent& e) {
+    if (e.kind == VsJob::Kind::GoTo) {
+        auto it = pending_goto_.find(e.job);
+        if (it == pending_goto_.end()) return;
+        const auto [file, line] = it->second;
+        pending_goto_.erase(it);
+        if (!e.ok) open_in_code(file, line);  // no Visual Studio has the project open
+        return;
+    }
+    on_vs_job_console(e);
+    if (e.type == VsEvent::Type::Output) return;
     if (e.kind == VsJob::Kind::Diagnose) {
         if (e.type != VsEvent::Type::Finished) return;
         if (e.ok) {

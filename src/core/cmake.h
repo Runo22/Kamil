@@ -79,4 +79,9 @@ struct BuildSummary {
 
 BuildSummary summarize_build_log(std::string_view log);
 
+// One output line as an error / warning with a source location, if it is one. Understands MSVC
+// ("a.cpp(12): error C2065: ..."), GCC / Clang ("a.cpp:12:5: error: ...") and Python tracebacks
+// ('  File "a.py", line 12': a location, returned with code "trace").
+std::optional<BuildIssue> parse_build_line(std::string_view line);
+
 }  // namespace kamil
