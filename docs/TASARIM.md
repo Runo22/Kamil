@@ -786,6 +786,7 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 | İki dilli arayüz (İngilizce / Türkçe, sistem diline göre), komutlar iki dilde de aranır | ✓ |
 | VS iş kuyruğu: görünür liste, iptal, sınırlı ve nedenli beklemeler, yönetici VS tespiti, `kamil.log` | ✓ |
 | Sağlamlaştırma: minidump + "Kamil: Diagnostics", dosya indeksinin canlı güncellenmesi (`ReadDirectoryChangesW`) + disk önbelleği, `kamil_bench` | ✓ |
+| Özel komutlar (`commands:`): `run` komut satırı veya son projede `action`, yer tutucular, global kısayollar (varsayılan `Ctrl+Alt+B` build, `Ctrl+Alt+D` debug) | ✓ |
 | Hız: File API önbelleği + arka planda ön okuma (Ctrl+K anında), yazarken daraltan + paralel dosya araması (200 bin dosyada tuş başı ~3–10 ms) | ✓ |
 | Eylem paneli, `Tab` tamamlama, alt bilgi çubuğu, iş durumu | ✓ |
 
@@ -804,8 +805,7 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 
 | İş | Neden | Büyüklük |
 |---|---|---|
-| Özel komutlar (parametreli, `{com}`/`{clip}`… yer tutucular, zincir, onay) | "Custom command desteği olmalı" | O |
-| Öğe başına global kısayollar (script, komut, klasör, plan eylemi: ör. `Ctrl+Alt+F5` = Debug) | İlk istek: "global erişimi olan scriptler" | K |
+| ~~Özel komutlar + global kısayollar~~ | Yapıldı (v1.2) | — |
 | LAN / intranet: yer imleri, UNC yolları, şablonlu URL'ler (`bug 1234`), erişilebilirlik testi (SMB donmasını önler) | İlk istek: "offline olsa bile LAN üzerinden klasör ve web siteleri" | O |
 
 **Faz C — Geliştirici araçları**

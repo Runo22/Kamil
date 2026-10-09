@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cwchar>
 #include <cwctype>
 #include <fstream>
 #include <sstream>
@@ -155,6 +156,7 @@ int App::run(HINSTANCE instance, bool autostart) {
     }
 
     usage_.load(paths_.usage_file());
+    load_last_project();
     apps_ = AppsProvider::load_cache(paths_.apps_cache_file());
 
     ensure_config_files();
@@ -176,6 +178,7 @@ int App::run(HINSTANCE instance, bool autostart) {
 
     if (usage_.dirty()) usage_.save(paths_.usage_file());
     UnregisterHotKey(hwnd_, kHotkeyId);
+    for (int id : command_hotkey_ids_) UnregisterHotKey(hwnd_, id);
     watcher_.stop();
     tray_.destroy();
     if (file_scan_.joinable()) {
@@ -274,6 +277,7 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
     const bool language_changed = lang != language();
     set_language(lang);
     if (touched(keys::kHotkey)) register_hotkey(s.get_string(keys::kHotkey));
+    if (touched(keys::kCommands) || touched(keys::kHotkey)) load_user_commands(s);
     if (touched(keys::kStartWithWindows) && !paths_.portable) set_autostart(s.get_bool(keys::kStartWithWindows), paths_.exe);
 
     LauncherStyle style;
@@ -383,6 +387,7 @@ void App::rebuild_items() {
         it.prepare();
         items.push_back(std::move(it));
     }
+    add_user_command_items(items);
     for (const auto& repo : repos_) {
         Item it;
         it.kind = ItemKind::Repo;
@@ -434,11 +439,16 @@ void App::on_activate(const Item& item, LaunchMode mode) {
             show_jobs();
             return;
         }
+        if (item.target.rfind(L"user:", 0) == 0) {  // may ask for {input} in the launcher
+            run_user_command(std::wcstoul(item.target.c_str() + 5, nullptr, 10));
+            return;
+        }
         launcher_.hide();
         run_command(item.target);
         return;
     }
     if (item.kind == ItemKind::Repo) {
+        if (is_project(item.path)) set_last_project(item.path);
         const std::wstring action = mode == LaunchMode::OpenLocation ? L"explorer" : default_repo_action();
         run_action(item, action);
         return;
@@ -459,6 +469,10 @@ void App::on_activate(const Item& item, LaunchMode mode) {
 }
 
 void App::run_command(const std::wstring& id) {
+    if (id.rfind(L"user:", 0) == 0) {
+        run_user_command(std::wcstoul(id.c_str() + 5, nullptr, 10));
+        return;
+    }
     if (id == L"settings") {
         ensure_config_files();
         const auto file = paths_.settings_file();
@@ -882,6 +896,8 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
                 // Folders that cannot be watched (e.g. some network shares): rescan when the window opens.
                 if (!launcher_.visible() && watched_roots_ < index_roots_ && GetTickCount64() - files_scanned_at_ > 120'000) scan_files();
                 launcher_.toggle();
+            } else if (wp >= 1000) {  // custom command hotkey
+                run_user_command(static_cast<size_t>(wp - 1000));
             }
             return 0;
         case WM_KAMIL_SHOW:
@@ -923,6 +939,7 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             tools_ready_ = true;
             log_line(L"[tools]\n" + tools_.report);
             invalidate_project({});
+            rebuild_items();  // command icons come from the tools (devenv)
             if (git_) git_->configure(tools_.git, store_.current()->get_bool(keys::kGitStatus));
             return 0;
         }

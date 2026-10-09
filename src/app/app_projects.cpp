@@ -410,6 +410,7 @@ bool App::quick_action(const Item& item, wchar_t key) {
 }
 
 bool App::run_project_action(const Item& repo, const std::wstring& action) {
+    set_last_project(repo.path);
     auto choice = project_state_.get(repo.path);
     auto save_choice = [&] {
         project_state_.set(repo.path, choice);

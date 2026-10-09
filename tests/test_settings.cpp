@@ -197,3 +197,32 @@ TEST(settings_messages_follow_language) {
     CHECK(load_settings_text(builtin_schema(), yaml_tr).diagnostics.empty());
     CHECK(load_settings_text(builtin_schema(), yaml_en).diagnostics.empty());
 }
+
+TEST(settings_custom_commands) {
+    const char* yaml =
+        "commands:\n"
+        "  - name: Flash device\n"
+        "    run: 'py flash.py --port {com}'\n"
+        "    hotkey: ctrl+alt+f\n"
+        "    console: hidden\n"
+        "  - name: Build it\n"
+        "    action: build\n"
+        "    hotkey: ''\n"
+        "  - name: Broken\n"
+        "    action: explode\n";
+    auto r = load_settings_text(builtin_schema(), yaml, "settings.yaml");
+    const auto& cmds = r.settings->get_objects(keys::kCommands);
+    CHECK_EQ(cmds.size(), 3u);  // an invalid optional field falls back to its default
+    CHECK(has_diag(r, Diagnostic::Severity::Error, "commands[2].action"));
+    CHECK_EQ(cmds[0].find("hotkey")->as_string(), std::string("Ctrl+Alt+F"));  // normalized
+    CHECK_EQ(cmds[0].find("console")->as_string(), std::string("hidden"));
+    CHECK_EQ(cmds[0].find("action")->as_string(), std::string("none"));
+    CHECK_EQ(cmds[1].find("hotkey")->as_string(), std::string(""));
+    CHECK_EQ(cmds[1].find("console")->as_string(), std::string("keep"));
+    // Defaults: build / debug / configure the last project.
+    const auto default_snapshot = default_settings(builtin_schema());
+    const auto& defaults = default_snapshot->get_objects(keys::kCommands);
+    CHECK_EQ(defaults.size(), 3u);
+    CHECK_EQ(defaults[0].find("action")->as_string(), std::string("build"));
+    CHECK_EQ(defaults[0].find("admin")->as_bool(), false);
+}

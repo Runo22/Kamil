@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <map>
 #include <memory>
 #include <thread>
 #include <string>
@@ -92,6 +93,19 @@ private:
     void on_files_ready(std::unique_ptr<FileIndex> index);
     void on_fs_changes(const std::vector<FsChange>& changes);
     void save_index_cache();
+
+    // Custom commands (app_commands.cpp)
+    struct UserCommand {
+        std::wstring name, run, action, hotkey, dir, console;
+        bool admin = false, confirm = false;
+    };
+    void load_user_commands(const Settings& s);
+    void register_command_hotkeys();
+    void add_user_command_items(std::vector<Item>& items) const;
+    void run_user_command(size_t index, const std::wstring* input = nullptr);
+    std::map<std::string, std::string> placeholder_values(const std::wstring& input);
+    void set_last_project(const std::wstring& root);
+    void load_last_project();
 
     // Diagnostics (app_diagnostics.cpp)
     void report_crashes();
@@ -192,6 +206,10 @@ private:
     size_t query_next_ = 0;
     std::atomic<ULONGLONG> warm_ms_{0};  // written by the warm thread
     bool crashed_last_time_ = false;
+    std::vector<UserCommand> user_commands_;
+    std::vector<int> command_hotkey_ids_;
+    std::wstring failed_command_hotkeys_;
+    std::wstring last_project_;  // CMake project acted on last: target of action commands
     std::thread warm_;  // pre-reads CMake presets and File API replies so Ctrl+K opens instantly
     std::atomic<bool> warm_cancel_{false};
 

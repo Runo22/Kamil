@@ -52,6 +52,9 @@ inline constexpr const char* kDefaultArgs = "dev.default_args";
 inline constexpr const char* kVsConfigureCommand = "dev.vs_configure_command";
 inline constexpr const char* kVsReconfigureCommand = "dev.vs_reconfigure_command";
 inline constexpr const char* kVsWaitSeconds = "dev.vs_wait_seconds";
+
+// Custom commands (a top-level list)
+inline constexpr const char* kCommands = "commands";
 }  // namespace keys
 
 }  // namespace kamil

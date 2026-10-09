@@ -248,8 +248,24 @@ public:
 
     static std::shared_ptr<Settings> defaults(const Schema& schema) {
         auto s = std::make_shared<Settings>();
-        for (const auto& d : schema.all()) s->values_[d.key] = Settings::Entry{d.def, Source::Default, 0};
+        for (const auto& d : schema.all()) s->values_[d.key] = Settings::Entry{normalized_default(d), Source::Default, 0};
         return s;
+    }
+
+    // Object list defaults may list only some fields (the YAML writer shows just those); the
+    // value itself gets every field in schema order, exactly like a loaded list.
+    static Value normalized_default(const SettingDef& d) {
+        if (d.kind != Kind::ObjectList) return d.def;
+        Value::Objects out;
+        for (const auto& obj : d.def.as_objects()) {
+            Object full;
+            for (const auto& fd : d.fields) {
+                const Value* v = obj.find(fd.key);
+                full.fields.emplace_back(fd.key, v ? *v : fd.def);
+            }
+            out.push_back(std::move(full));
+        }
+        return Value(std::move(out));
     }
 
     LoadResult load(std::string_view yaml) {
@@ -457,6 +473,10 @@ private:
                 return bad(std::string(loc("invalid choice '", "geçersiz seçenek '")) + raw + loc("'; valid: ", "'; geçerli: ") + all);
             }
             case Kind::Hotkey: {
+                if (raw.empty() && def.def.as_string().empty()) {  // optional hotkey (e.g. of a command)
+                    *out = Value("");
+                    return true;
+                }
                 std::string err;
                 auto hk = parse_hotkey(raw, &err);
                 if (!hk) return bad(err);

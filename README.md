@@ -32,7 +32,7 @@ Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 | VS iş kuyruğu: **Kamil: VS jobs** listesi, iptal, sınırlı ve nedenli beklemeler, `kamil.log` | ✓ |
 | Dosya indeksi canlı güncellenir (yeni script anında çıkar), diske önbelleklenir (açılışta hemen hazır) | ✓ |
 | Çökme dökümü (minidump) + **Kamil: Diagnostics** raporu (sürüm, indeks, arama hızı, VS, dökümler) | ✓ |
-| Özel komutlar + global kısayollar (ör. her yerden son projeyi derle) | sıradaki |
+| Özel komutlar + global kısayollar: `Ctrl+Alt+B` / `Ctrl+Alt+D` her yerden son projeyi derler / debug eder | ✓ |
 | Konsol penceresi (çıktıları Kamil içinde sekmeli gösterme) | sonra |
 | Süreç araçları (kill, dosyayı kilitleyen süreç) | ertelendi (istenince) |
 | Ayarlar penceresi | ertelendi (istenince) |
@@ -136,6 +136,39 @@ eylemi nedenini yazar; `dev.devenv_path` ile yolu verin. Her VS adımı `kamil.l
 İlk kullanımda bir kez **Kamil: VS bağlantısını test et** komutunu çalıştırın: açık VS örneklerini, Output bölmelerini
 ve VS'teki CMake komutlarının adlarını içeren bir rapor açılır. Configure komutu otomatik bulunamazsa rapordaki adı
 `dev.vs_configure_command` ayarına yazın.
+
+## Özel komutlar ve global kısayollar
+
+`settings.yaml` içindeki `commands:` listesi aramada adıyla çıkar; `hotkey` verilirse Kamil açılmadan, her
+uygulamanın içinden çalışır. Varsayılanlar:
+
+```yaml
+commands:
+  - name: Build last project      # son kullanılan CMake projesi (Alt+B/Alt+D/Alt+C ile en son işlem yapılan)
+    action: build                 # configure | build | rebuild | reconfigure | debug | run | jobs | cancel-jobs
+    hotkey: Ctrl+Alt+B
+  - name: Debug last project
+    action: debug
+    hotkey: Ctrl+Alt+D
+  - name: Configure last project
+    action: configure
+```
+
+Kendi komut satırınız (cmd ile çalışır, `|` ve `&&` kullanılabilir):
+
+```yaml
+  - name: Flash device
+    run: 'py D:\tools\flash.py --port {com} --file "{exe}"'
+    hotkey: Ctrl+Alt+F
+    console: hidden        # keep (varsayılan) | close | hidden: pencere yok, sonuç bildirimde
+  - name: Log ara
+    run: 'findstr /i "{input}" D:\logs\*.log'   # {input} çalıştırırken sorulur
+    confirm: false
+    admin: false
+```
+
+Yer tutucular: `{input}` `{clip}` `{date}` `{time}` ve son projeden `{project}` `{project_dir}` `{preset}` `{target}`
+`{config}` `{exe}` `{exe_dir}` `{com}` `{args}`. Kısayol başka bir programdaysa tray balonu bir kez uyarır.
 
 ## Ayarlar
 

@@ -227,6 +227,51 @@ Schema build() {
                          "Visual Studio açılana ya da bir komutu etkinleştirene kadar (ör. CMake hazırlanırken) en çok kaç saniye beklensin. Bekleyen işler 'Kamil: VS işleri' ile iptal edilebilir"});
         s.add(std::move(d));
     }
+    {
+        auto command = [](const char* name, const char* action, const char* hotkey) {
+            Object o;
+            o.fields = {{"name", Value(name)}, {"action", Value(action)}, {"hotkey", Value(hotkey)}};
+            return o;
+        };
+        auto d = def(keys::kCommands, Kind::ObjectList,
+                     Value::Objects{command("Build last project", "build", "Ctrl+Alt+B"), command("Debug last project", "debug", "Ctrl+Alt+D"),
+                                    command("Configure last project", "configure", "")},
+                     {"Custom commands", "Özel komutlar"},
+                     {"Your own commands: found by name in the search, optionally with a global hotkey that works without opening Kamil. "
+                      "Either 'run' a command line or do an 'action' on the CMake project used last. Placeholders in run/dir: {input} (asked "
+                      "when run), {clip}, {date}, {time}, {project}, {project_dir}, {preset}, {target}, {config}, {exe}, {exe_dir}, {com}, {args}",
+                      "Kendi komutlarınız: aramada adıyla bulunur, isteğe bağlı global kısayolla Kamil açılmadan da çalışır. Ya 'run' ile bir "
+                      "komut satırı çalıştırır ya da son kullanılan CMake projesinde bir 'action' yapar. run/dir içinde yer tutucular: {input} "
+                      "(çalışırken sorulur), {clip}, {date}, {time}, {project}, {project_dir}, {preset}, {target}, {config}, {exe}, {exe_dir}, "
+                      "{com}, {args}"});
+        d.fields.push_back(field("name", Kind::String, "", {"Shown in the search, e.g. 'Flash device'", "Aramada görünen ad, ör. 'Cihazı flashla'"}, true));
+        d.fields.push_back(field("run", Kind::String, "",
+                                 {"Command line, run through cmd (pipes and && work), e.g. 'py D:\\tools\\flash.py --port {com}'",
+                                  "cmd ile çalışan komut satırı (| ve && çalışır), ör. 'py D:\\tools\\flash.py --port {com}'"}));
+        {
+            SettingDef a = field("action", Kind::Enum, "none",
+                                 {"Instead of 'run': configure | build | rebuild | reconfigure | debug | run (on the project used last), "
+                                  "jobs (VS job list), cancel-jobs",
+                                  "'run' yerine: configure | build | rebuild | reconfigure | debug | run (son kullanılan projede), "
+                                  "jobs (VS iş listesi), cancel-jobs"});
+            a.choices = {"none", "configure", "build", "rebuild", "reconfigure", "debug", "run", "jobs", "cancel-jobs"};
+            d.fields.push_back(std::move(a));
+        }
+        d.fields.push_back(field("hotkey", Kind::Hotkey, "", {"Global hotkey, e.g. Ctrl+Alt+F; empty: none", "Global kısayol, ör. Ctrl+Alt+F; boş: yok"}));
+        d.fields.push_back(field("dir", Kind::Path, "", {"Working folder; empty: the project folder, else your user folder",
+                                                         "Çalışma klasörü; boş: proje klasörü, yoksa kullanıcı klasörü"}));
+        {
+            SettingDef c = field("console", Kind::Enum, "keep",
+                                 {"keep: console stays open | close: closes when done | hidden: no window, result as notification",
+                                  "keep: konsol açık kalır | close: bitince kapanır | hidden: pencere yok, sonuç bildirimle"});
+            c.choices = {"keep", "close", "hidden"};
+            d.fields.push_back(std::move(c));
+        }
+        d.fields.push_back(field("admin", Kind::Bool, false, {"Run as administrator", "Yönetici olarak çalıştır"}));
+        d.fields.push_back(field("confirm", Kind::Bool, false, {"Ask before running", "Çalıştırmadan önce sor"}));
+        d.apply = Apply::Hotkey;
+        s.add(std::move(d));
+    }
     return s;
 }
 

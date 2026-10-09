@@ -70,6 +70,7 @@ if(WIN32)
         src/app/app_files.cpp
         src/app/app_projects.cpp
         src/app/app_diagnostics.cpp
+        src/app/app_commands.cpp
         src/app/paths.cpp
         src/platform/com_ports.cpp
         src/platform/crash.cpp
