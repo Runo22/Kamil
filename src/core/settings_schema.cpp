@@ -49,8 +49,10 @@ Schema build() {
                  {"auto: follows the Windows display language", "auto: Windows görüntü dilini izler"}));
     {
         auto d = def(keys::kHotkey, Kind::Hotkey, "Alt+Space", {"Hotkey", "Ana kısayol"},
-                     {"Global hotkey that shows and hides Kamil. Examples: Alt+Space, Ctrl+Space, Win+Alt+K",
-                      "Kamil'i açıp kapatan global kısayol. Örnek: Alt+Space, Ctrl+Space, Win+Alt+K"});
+                     {"Global hotkey that shows and hides Kamil. Examples: Alt+Space, Ctrl+Space, Win+Space (Kamil takes it over from "
+                      "the keyboard layout switch; Alt+Shift still switches layouts)",
+                      "Kamil'i açıp kapatan global kısayol. Örnek: Alt+Space, Ctrl+Space, Win+Space (Kamil bunu klavye düzeni "
+                      "değiştirmeden devralır; düzen Alt+Shift ile yine değişir)"});
         d.apply = Apply::Hotkey;
         s.add(std::move(d));
     }

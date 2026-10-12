@@ -786,6 +786,7 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 | İki dilli arayüz (İngilizce / Türkçe, sistem diline göre), komutlar iki dilde de aranır | ✓ |
 | VS iş kuyruğu: görünür liste, iptal, sınırlı ve nedenli beklemeler, yönetici VS tespiti, `kamil.log` | ✓ |
 | Sağlamlaştırma: minidump + "Kamil: Diagnostics", dosya indeksinin canlı güncellenmesi (`ReadDirectoryChangesW`) + disk önbelleği, `kamil_bench` | ✓ |
+| Windows tuşlu kısayollar (`Win+Space` dahil): düşük seviyeli klavye kancası (ayrı iş parçacığında), Başlat menüsü maskelenir; diğerleri `RegisterHotKey` | ✓ |
 | Kamil Console: çalıştırma / VS build / gizli komut çıktıları sekmelerde, hata renklendirme (MSVC, GCC/Clang, Python), F8 / çift tık → VS'te satır (yoksa VS Code), Stop, Run again | ✓ |
 | Özel komutlar (`commands:`): `run` komut satırı veya son projede `action`, yer tutucular, global kısayollar (varsayılan `Ctrl+Alt+B` build, `Ctrl+Alt+D` debug) | ✓ |
 | Hız: File API önbelleği + arka planda ön okuma (Ctrl+K anında), yazarken daraltan + paralel dosya araması (200 bin dosyada tuş başı ~3–10 ms) | ✓ |

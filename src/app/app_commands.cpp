@@ -94,6 +94,7 @@ void App::load_user_commands(const Settings& s) {
 void App::register_command_hotkeys() {
     for (int id : command_hotkey_ids_) UnregisterHotKey(hwnd_, id);
     command_hotkey_ids_.clear();
+    hook_commands_.clear();
     std::wstring failed;
     const auto main = parse_hotkey(hotkey_text_);
     for (size_t i = 0; i < user_commands_.size(); ++i) {
@@ -102,12 +103,18 @@ void App::register_command_hotkeys() {
         const auto hk = parse_hotkey(narrow(c.hotkey));
         const int id = kCommandHotkeyBase + static_cast<int>(i);
         const bool same_as_main = hk && main && hk->mods == main->mods && hk->vk == main->vk;
+        if (hk && !same_as_main && (hk->mods & kModWin)) {  // Win+...: through the keyboard hook
+            hook_commands_.push_back({hk->mods, hk->vk, static_cast<WPARAM>(id)});
+            continue;
+        }
         if (hk && !same_as_main && RegisterHotKey(hwnd_, id, hk->mods | MOD_NOREPEAT, hk->vk)) {
             command_hotkey_ids_.push_back(id);
             continue;
         }
         failed += (failed.empty() ? L"" : L", ") + c.hotkey + L" (" + c.name + L")";
     }
+    if (!update_key_hook())
+        for (const auto& b : hook_commands_) failed += (failed.empty() ? L"" : L", ") + widen(format_hotkey({b.mods, b.vk}));
     // Report a conflict once, not on every settings reload.
     if (!failed.empty() && failed != failed_command_hotkeys_)
         notify(loc(L"Command hotkey unavailable", L"Komut kısayolu kullanılamıyor"),

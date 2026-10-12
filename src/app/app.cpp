@@ -183,6 +183,9 @@ int App::run(HINSTANCE instance, bool autostart) {
     if (usage_.dirty()) usage_.save(paths_.usage_file());
     UnregisterHotKey(hwnd_, kHotkeyId);
     for (int id : command_hotkey_ids_) UnregisterHotKey(hwnd_, id);
+    hook_main_.clear();
+    hook_commands_.clear();
+    update_key_hook();
     watcher_.stop();
     tray_.destroy();
     if (file_scan_.joinable()) {
@@ -347,13 +350,36 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
     rebuild_items();
 }
 
+bool App::update_key_hook() {
+    std::vector<KeyHook::Binding> all = hook_main_;
+    all.insert(all.end(), hook_commands_.begin(), hook_commands_.end());
+    const bool ok = key_hook_.set(std::move(all), hwnd_);
+    if (!ok) log_line("[hotkey] keyboard hook could not be installed");
+    return ok;
+}
+
 void App::register_hotkey(const std::string& text) {
     UnregisterHotKey(hwnd_, kHotkeyId);
     hotkey_ok_ = false;
     hotkey_text_ = text;
+    hook_main_.clear();
     const auto hk = parse_hotkey(text);
-    if (!hk) return;  // already reported by validation
-    if (RegisterHotKey(hwnd_, kHotkeyId, hk->mods | MOD_NOREPEAT, hk->vk)) {
+    if (!hk) {  // already reported by validation
+        update_key_hook();
+        return;
+    }
+    // Win+...: Windows owns most of these (Win+Space = keyboard layout), so they are taken over
+    // with the keyboard hook instead of RegisterHotKey.
+    const bool via_hook = (hk->mods & kModWin) != 0;
+    bool ok = false;
+    if (via_hook) {
+        hook_main_.push_back({hk->mods, hk->vk, static_cast<WPARAM>(kHotkeyId)});
+        ok = update_key_hook();
+    } else {
+        update_key_hook();  // drops a previous Win+... binding
+        ok = RegisterHotKey(hwnd_, kHotkeyId, hk->mods | MOD_NOREPEAT, hk->vk) != FALSE;
+    }
+    if (ok) {
         hotkey_ok_ = true;
         tray_.set_tooltip(L"Kamil — " + hotkey_display(text));
         return;

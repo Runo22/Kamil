@@ -21,6 +21,7 @@
 #include "platform/com_ports.h"
 #include "platform/file_watcher.h"
 #include "platform/icon_loader.h"
+#include "platform/key_hook.h"
 #include "platform/tools.h"
 #include "platform/tree_watcher.h"
 #include "platform/shell.h"
@@ -227,6 +228,11 @@ private:
     std::vector<int> command_hotkey_ids_;
     std::wstring failed_command_hotkeys_;
     std::wstring last_project_;  // CMake project acted on last: target of action commands
+
+    // Hotkeys with the Windows key go through a keyboard hook (Windows reserves many of them).
+    KeyHook key_hook_;
+    std::vector<KeyHook::Binding> hook_main_, hook_commands_;
+    bool update_key_hook();
 
     ConsoleWindow console_;
     struct ConsoleRun {

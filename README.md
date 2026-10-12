@@ -1,83 +1,213 @@
 # Kamil
 
-Windows için offline, geliştirici odaklı başlatıcı. `Alt+Space` ile açılır, yazdıkça Türkçe karakterleri
-tanıyan bulanık arama yapar ve seçimlerinden öğrenir. Arayüz **İngilizce ve Türkçe**; varsayılan olarak Windows'un
-görüntü dilini izler (`general.language: auto | en | tr`).
+Windows için offline, geliştirici odaklı başlatıcı. Bir kısayolla açılır; uygulamaları, projeleri, dosyaları ve
+script'leri yazdıkça bulur, seçimlerinden öğrenir. CMake projelerini Visual Studio'ya **configure / build / debug**
+ettirir, çıktıları kendi konsolunda gösterir. İnternet gerektirmez, tek bir `Kamil.exe`'dir.
 
+Arayüz İngilizce ve Türkçe; varsayılan olarak Windows'un görüntü dilini izler (`general.language: auto | en | tr`).
 Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 
-## Durum: Faz 0 + git + Faz 1 (build / debug / çalıştır)
+**İçindekiler:**
+[Başlarken](#başlarken) ·
+[Açma kısayolu](#açma-kısayolu-altspace--winspace) ·
+[Arama penceresi](#arama-penceresi) ·
+[Projeler](#projeler-cmake--visual-studio) ·
+[Her yerden çalışan kısayollar](#her-yerden-çalışan-kısayollar-ve-özel-komutlar) ·
+[Kamil Console](#kamil-console) ·
+[Dosyalar ve script'ler](#dosyalar-ve-scriptler) ·
+[Dahili komutlar](#dahili-komutlar) ·
+[Ayarlar](#ayarlar) ·
+[Sorun giderme](#sorun-giderme) ·
+[Geliştirme](#geliştirme)
 
-| Özellik | Durum |
-|---|---|
-| Tray simgesi, tek örnek, `Alt+Space` (değiştirilebilir) | ✓ |
-| Arama penceresi: Direct2D + DirectComposition, Win10'da yuvarlak köşe + gölge, açık/koyu tema, sistem vurgu rengi, DPI duyarlı | ✓ |
-| Uygulamalar: Başlat Menüsü + Store/UWP (`shell:AppsFolder`), disk önbelleği ile anında hazır, kendi ikonlarıyla | ✓ |
-| Bulanık arama: `code` → Visual Studio Code (varsayılan takma ad), kelime başı / CamelCase / baş harfler (`ws` → Windows Security), Türkçe katlama (`calisma` → Çalışma) | ✓ |
-| Klasör önceliği: seçtiğin klasörlerin altındaki sonuçlar öne (veya eksi değerle arkaya) | ✓ |
-| Dosya ve klasör araması: `search.folders` altındaki her şey (kendi indeksi, Everything gerekmez) | ✓ |
-| Script'ler: `.bat .cmd .ps1 .py .pyw .sh .exe` — `Enter` çalıştır, `Alt+E` düzenle (VS Code / Not Defteri) | ✓ |
-| Öğrenme: sık/son kullanılan + "bu yazışta bunu seçtin" (yerel, `usage.tsv`) | ✓ |
-| YAML ayarlar: şema tabanlı, doğrulama, satır numaralı hata bildirimi, kaydedince canlı yeniden yükleme, JSON Schema | ✓ |
-| Takma adlar, gizlenecek uygulama desenleri, Windows ile başlat | ✓ |
-| Git: proje köklerindeki depolar, dal (anında) + değişiklik / ahead-behind (arka planda) | ✓ |
-| Eylem paneli (`Ctrl+K`): VS 2026/2022 (Open Folder), VS Code, Gezgin, terminal, Git Bash, Git GUI — kendi ikonlarıyla | ✓ |
-| `Tab` tamamlama, alt bilgi çubuğu (dal, değişiklikler, tuş ipuçları) | ✓ |
-| CMake projeleri: preset'ler (`CMakePresets.json`), hedefler (CMake File API), seçimler proje başına hatırlanır | ✓ |
-| VS 2026/2022'de Build / Rebuild / Configure — COM (DTE) ile, bitişi izlenir, hata/uyarı sayısı tray'de | ✓ |
-| Debug: VS'te derle → programı duraklatılmış başlat → VS debugger'ı bağla → devam | ✓ |
-| Çalıştır (ayrı konsol penceresinde), diğer preset'lerin build'lerini ayrı ayrı çalıştırma | ✓ |
-| COM port seçimi (dostu ad, VID/PID ile hatırlama), argüman şablonu `--port {com}` | ✓ |
-| İki dilli arayüz (İngilizce / Türkçe); dahili komutlar iki dilde de aranır (`settings` = `ayarlar`) | ✓ |
-| VS iş kuyruğu: **Kamil: VS jobs** listesi, iptal, sınırlı ve nedenli beklemeler, `kamil.log` | ✓ |
-| Dosya indeksi canlı güncellenir (yeni script anında çıkar), diske önbelleklenir (açılışta hemen hazır) | ✓ |
-| Çökme dökümü (minidump) + **Kamil: Diagnostics** raporu (sürüm, indeks, arama hızı, VS, dökümler) | ✓ |
-| Özel komutlar + global kısayollar: `Ctrl+Alt+B` / `Ctrl+Alt+D` her yerden son projeyi derler / debug eder | ✓ |
-| **Kamil Console**: çalıştırmalar, VS build çıktısı ve gizli komutlar sekmelerde; hatalar renkli, tıkla/F8 → VS'te o satır | ✓ |
-| Süreç araçları (kill, dosyayı kilitleyen süreç) | ertelendi (istenince) |
-| Ayarlar penceresi | ertelendi (istenince) |
-| Windows 11 Acrylic arka plan | sonraki adım (şu an iki sistemde de düz yüzey) |
+---
 
-## Derleme (Visual Studio 2026)
+## Başlarken
 
-1. Visual Studio 2026'da **File → Open → Folder** ile repo klasörünü açın.
-2. Üst çubuktan preset seçin: `x64 Release` (veya `x64 Debug`).
-3. **Build → Build All**. Çıktı: `out\build\x64-release\Kamil.exe`
+1. `Kamil.exe`'yi istediğin bir klasöre koy ve çalıştır (kurulum yok, ek DLL gerekmez). Derlenmiş son sürüm GitHub
+   Actions'taki her başarılı çalıştırmada *Kamil-x64-release* olarak indirilebilir.
+2. Saatin yanında Kamil simgesi belirir ve bir balon açma kısayolunu söyler (varsayılan **`Alt+Space`**).
+3. İlk çalıştırmada açıklamalı bir `settings.yaml` oluşturulur: tray menüsü → **Edit settings**. Dosya kaydedildiği
+   anda uygulanır.
+4. Projelerinin bulunması için `dev.project_roots`, dosya/script araması için `search.folders` ayarlarını kendi
+   klasörlerine göre düzenle (bkz. [Ayarlar](#ayarlar)).
+5. Oturum açılınca kendiliğinden başlasın istersen: `general.start_with_windows: true`.
 
-Komut satırından (Developer PowerShell for VS 2026):
+Kamil zaten çalışırken `Kamil.exe`'yi tekrar açmak yeni bir kopya başlatmaz, açık olanın penceresini gösterir.
 
-```powershell
-cmake --preset x64-release
-cmake --build --preset x64-release
-ctest --preset x64-release        # çekirdek birim testleri
+## Açma kısayolu (`Alt+Space` / `Win+Space`)
+
+Kısayol `settings.yaml` içindeki `general.hotkey` ayarıdır; kaydedince hemen değişir:
+
+```yaml
+general:
+  hotkey: Win+Space     # veya Alt+Space (varsayılan), Ctrl+Space, Ctrl+Alt+K, F12 ...
 ```
 
-Tek bir `Kamil.exe` üretilir (statik CRT, ek DLL gerekmez). VS2022 ile de derlenmesi beklenir ama hedef VS2026'dır.
+- **`Win+Space`**: Windows bu kısayolu normalde *klavye düzenini değiştirmek* için kullanır. Kamil onu devralır
+  (düzen değişmez, Başlat menüsü de açılmaz); düzeni değiştirmek için **`Alt+Shift`** yine çalışır.
+  Windows tuşlu kısayollar klavye kancasıyla yakalanır. Bu yüzden **yönetici olarak çalışan bir pencere** (ör. "Run as
+  administrator" ile açılmış bir program) öndeyken çalışmazlar; o durumda Kamil'i de yönetici olarak çalıştır ya da
+  `Alt+Space` kullan.
+- Kısayol başka bir program tarafından alınmışsa (ör. PowerToys Run da `Alt+Space` kullanır) tray balonu uyarır;
+  başka bir kısayol seç.
+- Tray simgesine tıklamak da pencereyi açıp kapatır.
 
-## Kullanım
+## Arama penceresi
+
+Yazmaya başla: sonuçlar her tuşta güncellenir. Boş pencerede en sık / son kullandıkların listelenir.
+
+### Tuşlar
 
 | Tuş | İşlev |
 |---|---|
-| `Alt+Space` | Aç / kapat |
-| `↑ ↓`, `Ctrl+J`, `PgUp/PgDn`, fare tekerleği | Sonuçlarda gezin |
-| `Tab` | Seçili öğenin adını arama kutusuna yaz (tamamla) |
-| `Ctrl+K` veya metnin sonunda `→` | Eylem paneli; `Esc`/`←` geri |
-| `Alt+C` / `Alt+B` / `Alt+D` (CMake projesi seçiliyken) | CMake Configure / Build / Debug — seçili preset, hedef, port ve argümanlarla (`Alt+R` çalıştırır) |
-| Alt bilgideki tuş çipleri | Tıklanabilir: tuşla aynı işi yapar |
-| `Enter` | Aç |
-| `Ctrl+Enter` | Dosya konumunu Gezgin'de göster |
+| `Enter` | Seçileni aç / çalıştır |
 | `Shift+Enter` | Yönetici olarak çalıştır |
-| `Alt+1…9` | Görünen n. sonucu aç |
-| `Ctrl+C` | (metin seçili değilse) seçili öğenin yolunu kopyala |
-| `Esc` | Gizle |
+| `Ctrl+Enter` | Dosya konumunu Gezgin'de göster (projelerde: klasörü Gezgin'de aç) |
+| `Alt+1` … `Alt+9` | Görünen n. sonucu doğrudan aç |
+| `↑` `↓`, `Ctrl+J`, fare tekerleği | Sonuçlarda gezin |
+| `PgUp` `PgDn`, `Ctrl+Home` `Ctrl+End` | Sayfa sayfa / en başa / en sona |
+| `Tab` | Seçili öğenin adını arama kutusuna yaz (tamamla) |
+| `Ctrl+K` veya metnin sonunda `→` | **Eylem paneli**: seçili öğe için yapılabilecek her şey |
+| `Esc` veya boş filtrede `←` | Eylem panelinden geri dön; ana listede pencereyi kapat |
+| `Ctrl+C` | Metin seçili değilse seçili öğenin yolunu kopyala |
+| `Ctrl+A` `Ctrl+V` `Ctrl+X`, `Ctrl+Backspace` | Arama kutusunda düzenleme (`Ctrl+←/→` kelime kelime) |
+| `Alt+harf` | Seçili öğeye özel hızlı eylem (aşağıdaki tablolar) |
+| `Alt+F4` | Pencereyi kapat |
 
-Boş pencerede en sık / son kullandıkların listelenir. `Kamil:` ile başlayan dahili komutlar da aranabilir, iki dilde de:
-`settings` / `ayar` → *Kamil: Edit settings*, `rescan` / `tara`, `jobs` / `iptal` → *Kamil: VS jobs*, `log`, `quit` …
+Fareyle de seçilebilir; başka bir yere tıklamak pencereyi kapatır (`general.hide_on_focus_loss`).
+
+### Ne aranır, nasıl eşleşir
+
+- **Uygulamalar:** Başlat Menüsü ve Store uygulamaları, kendi ikonlarıyla.
+- **Projeler:** `dev.project_roots` altındaki git depoları ve CMake projeleri (dal adıyla).
+- **Dosyalar ve klasörler:** `search.folders` altındaki her şey (Everything gerekmez); yeni dosyalar anında görünür.
+- **Dahili komutlar** (`Kamil: …`) ve kendi **özel komutların**.
+
+Eşleştirme bulanıktır: harflerin sırayla geçmesi yeter, kelime başları ve baş harfler öne çıkar (`ws` → *Windows
+Security*, `vsc` → *Visual Studio Code*). Türkçe karakterler katlanır: `calisma` → *Çalışma Planı*. Dahili komutlar iki
+dilde de bulunur (`settings` = `ayarlar`, `jobs` = `iptal`).
+
+Kamil seçimlerinden öğrenir: bir yazışta sık seçtiğin sonuç o yazışta en üste çıkar (`search.learning`; veriler sadece
+bu bilgisayarda, `usage.tsv`). Sıfırlamak için *Kamil: Forget what was learned*. Takma ad tanımlayabilirsin:
+`search.aliases` (ör. `code` → *Visual Studio Code*).
+
+### Alt bilgi çubuğu
+
+Pencerenin altındaki satır solda seçili öğenin bağlamını (git dalı, değişiklik sayısı, preset, hedef, COM port, çalışan
+VS işi), sağda o anda geçerli tuşları gösterir. Sağdaki **tuş çiplerine tıklamak** tuşa basmakla aynıdır.
+
+## Projeler (CMake + Visual Studio)
+
+Kamil derleme yapmaz: komutları **Visual Studio'ya** (2026 veya 2022, `dev.default_vs`) COM üzerinden gönderir, VS
+derler, Kamil bitişi izler ve sonucu gösterir. Projeler VS'te **Open Folder** ile açılır.
+
+### Bir CMake projesi seçiliyken
+
+| Tuş | İşlev |
+|---|---|
+| `Alt+C` | **Configure**: VS'te CMake configure (Generate Cache) |
+| `Alt+B` | **Build**: VS'te Build All; çıktı canlı olarak [Kamil Console](#kamil-console)'a akar |
+| `Alt+D` | **Debug**: VS'te derle → programı duraklatılmış başlat → VS debugger'ını bağla → devam (`main`'deki breakpoint'ler de tutar) |
+| `Alt+R` | **Çalıştır**: son derlenen exe'yi argümanlarla Kamil Console'da başlat |
+| `Enter` | Klasörü `dev.repo_action` ile aç (varsayılan: Visual Studio) |
+| `Ctrl+K` | Eylem paneli |
+
+VS bu klasörü açmamışsa Kamil `devenv "<klasör>"` ile açar ve hazır olmasını bekler (en çok `dev.vs_wait_seconds`,
+varsayılan 90 sn). Neyi beklediği alt bilgide yazar ("VS açılıyor", "CMake hazırlanıyor", "VS başka build yapıyor").
+
+### Eylem paneli (`Ctrl+K`)
+
+Sırasıyla: çalışan işi **iptal et** (varsa) · **Configure** · **Build** · **Debug** · **Run** · *Open in Visual Studio*
+· *Open in VS Code* · **Preset** seç · **Hedef** seç (birden çok exe varsa) · **COM port** seç · **Argümanlar** ·
+diğer preset'lerin build'lerini ayrı ayrı çalıştır · Rebuild · Önbelleği silip yeniden yapılandır · Gezgin, terminal,
+Git Bash, Git GUI, yolu / dal adını kopyala. Listede yazarak süzebilirsin; `Tab` tamamlar.
+
+- **Preset:** `CMakePresets.json` okunur. Seçmezsen VS'te en son configure edilen preset kullanılır. Open Folder'da VS
+  **kendi seçili preset'ini** derler; Kamil'deki seçim farklıysa uyarır.
+- **COM port:** bağlı seri portlar dostu adlarıyla listelenir; port numarası değişse de cihaz VID/PID ile hatırlanır.
+- **Argümanlar:** proje başına şablon, ör. `--port {com} --baud 115200`. Yer tutucular: `{com}` `{preset}`
+  `{target}` `{config}` `{project}`. Boşsa `dev.default_args` kullanılır.
+- Seçimler proje başına hatırlanır (`projects.tsv`).
+
+### VS iş kuyruğu
+
+VS işleri sırayla çalışır; aynı iş ikinci kez sıraya alınmaz. Alt bilgi çalışan işi ve `+N sırada` sayısını gösterir.
+
+- **Kamil: VS jobs** (veya tray menüsü → *VS jobs*): çalışan ve sıradaki işler; `Enter` seçileni iptal eder, çalışan
+  build VS'te de durdurulur.
+- Tray menüsü → *Cancel all VS jobs*.
+
+## Her yerden çalışan kısayollar ve özel komutlar
+
+Bu kısayollar Kamil'i açmadan, **her uygulamanın içinden** (VS'in içinden de) çalışır:
+
+| Kısayol | Varsayılan komut |
+|---|---|
+| `Ctrl+Alt+B` | **Build last project**: son kullanılan CMake projesini derler |
+| `Ctrl+Alt+D` | **Debug last project**: derler ve debug eder |
+| — | **Configure last project** (aramada adıyla bulunur; istersen kısayol ver) |
+
+*Son kullanılan proje*, Kamil'den en son bir eylem yaptığın (ya da `Enter` ile açtığın) CMake projesidir.
+
+Kısayollar ve komutlar `settings.yaml` içindeki `commands:` listesindedir. Her komut aramada adıyla da çıkar:
+
+```yaml
+commands:
+  - name: Build last project
+    action: build             # configure | build | rebuild | reconfigure | debug | run | jobs | cancel-jobs
+    hotkey: Ctrl+Alt+B
+  - name: Flash device
+    run: 'py D:\tools\flash.py --port {com} --file "{exe}"'   # cmd ile çalışır: | ve && kullanılabilir
+    hotkey: Win+F             # Win'li kısayollar da olur
+    console: hidden           # keep (pencere açık kalır) | close | hidden (Kamil Console'a yazar, sonucu bildirir)
+  - name: Log ara
+    run: 'findstr /i "{input}" D:\logs\*.log'   # {input} çalıştırılırken sorulur
+    dir: 'D:\logs'
+    confirm: false            # true: çalıştırmadan önce sor
+    admin: false              # true: yönetici olarak
+```
+
+Yer tutucular (`run` ve `dir` içinde): `{input}` (sorulur), `{clip}` (pano), `{date}`, `{time}` ve son projeden
+`{project}` `{project_dir}` `{preset}` `{target}` `{config}` `{exe}` `{exe_dir}` `{com}` `{args}`.
+
+Bir kısayol başka bir program tarafından kullanılıyorsa tray balonu bir kez uyarır. Türkçe klavyede `AltGr`, `Ctrl+Alt`
+olarak gelir: `Ctrl+Alt+harf` kısayolları o harfin AltGr karakterini (ör. `AltGr+Q` → `@`) yazdırmaz hale getirebilir;
+sorun olursa kısayolu değiştir.
+
+## Kamil Console
+
+`Alt+R` ile çalıştırılan programların çıktısı, Visual Studio build'lerinin **Build** bölmesi ve `console: hidden`
+komutlar **Kamil Console** penceresinde sekme sekme toplanır. Açmak için: *Kamil: Console* veya tray menüsü → *Console*.
+
+- Her preset/hedef kendi sekmesinde (`SensorUI [x64-debug]` ve `SensorUI [x64-release]` yan yana). Aynı iş tekrar
+  çalışınca biten sekmesi yeniden kullanılır.
+- MSVC, GCC/Clang hataları ve Python traceback satırları renklidir; dosya satırına gidilebilir: proje VS'te açıksa
+  **VS'te**, değilse **VS Code**'da açılır.
+- Build başarısız olursa pencere kendiliğinden açılır ve ilk hata seçili gelir (`dev.console_on_build: on_error |
+  always | never`).
+- Klavyeden girdi okuyan programlar için `dev.run_in: console` eski davranışa (her çalıştırma kendi konsol
+  penceresinde) döner.
+
+| Tuş / fare | İşlev |
+|---|---|
+| `F8` / `Shift+F8` | Sonraki / önceki hataya git ve dosyayı o satırda aç |
+| Çift tıklama, `Enter` | Seçili satırdaki dosyayı aç |
+| `F5`, *Run again* | Aynı çalıştırmayı / build'i tekrarla |
+| *Stop* | Kamil'in başlattığı programı durdur (build sekmesinde VS işini iptal et) |
+| `Ctrl+C` | Seçili satırları kopyala (seçim yoksa tümünü) |
+| `Ctrl+A` | Tümünü seç |
+| Tıklama, `Shift+tıklama`, `↑` `↓` (`Shift` ile) | Satır seç / seçimi genişlet |
+| `PgUp` `PgDn` `Home` `End`, fare tekerleği | Kaydır (`End` en alta iner ve yeni çıktıyı takip eder) |
+| `←` `→`, `Shift+tekerlek` | Uzun satırlarda yatay kaydır |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Sonraki / önceki sekme |
+| `Ctrl+W`, orta tıklama, sekmedeki `✕` | Sekmeyi kapat (çalışan program varsa önce sorar) |
+| `Esc` | Pencereyi gizle (sekmeler kaybolmaz) |
 
 ## Dosyalar ve script'ler
 
-Kamil, `search.folders` ile verdiğin klasörleri arka planda indeksler (Everything gerekmez; varsayılan: Masaüstü ve
-Belgeler). Bu klasörlerdeki dosya ve klasörler aramada çıkar ve `priority` kadar öne alınır:
+`search.folders` altındaki dosya ve klasörler aramada çıkar, `priority` kadar öne alınır. Klasörler izlenir: yeni, silinen
+ve yeniden adlandırılan dosyalar anında güncellenir. İndeks diske kaydedilir; Kamil açılır açılmaz arama yapılabilir.
 
 ```yaml
 search:
@@ -90,156 +220,140 @@ search:
       include: ['*.py', '*.pyw', '*.bat', '*.ps1', '*.sh']   # boş: tüm dosyalar
 ```
 
-| Dosya | Enter | Alt+E | Ctrl+K |
-|---|---|---|---|
-| `.bat` `.cmd` | `cmd /K` ile çalıştırır | düzenle | yönetici olarak, konum, terminal, yolu kopyala |
-| `.ps1` | `powershell -ExecutionPolicy Bypass -NoExit -File` | düzenle | 〃 |
-| `.py` / `.pyw` | `py` / `pyw` (veya `scripts.python`) | düzenle | 〃 |
-| `.sh` | Git for Windows `bash.exe` | düzenle | 〃 |
-| diğer dosyalar | varsayılan uygulamayla aç | düzenle | birlikte aç…, konum, yolu kopyala |
-| klasörler | Gezgin | — | VS Code, Visual Studio (Open Folder), terminal |
+| Dosya | `Enter` | `Alt+E` | `Alt+R` | `Ctrl+K` |
+|---|---|---|---|---|
+| `.bat` `.cmd` | `cmd` ile çalıştırır | düzenle | çalıştır | yönetici olarak, konum, bu klasörde terminal, yolu kopyala |
+| `.ps1` | PowerShell (`-ExecutionPolicy Bypass`) ile çalıştırır | düzenle | çalıştır | 〃 |
+| `.py` / `.pyw` | `py` / `pyw` (veya `scripts.python`) ile çalıştırır | düzenle | çalıştır | 〃 |
+| `.sh` | Git for Windows `bash` ile çalıştırır | düzenle | çalıştır | 〃 |
+| diğer dosyalar | varsayılan uygulamayla açar | düzenle | — | birlikte aç…, konum, yolu kopyala |
+| klasörler | Gezgin'de açar | — | — | VS Code, Visual Studio (Open Folder), terminal |
 
-`scripts.default_action: edit` ile Enter düzenlemeye, `Alt+R` çalıştırmaya döner. `scripts.keep_console_open: false`
-konsolun iş bitince kapanmasını sağlar. Klasörler izlenir: yeni, silinen ve yeniden adlandırılan dosyalar anında
-güncellenir; indeks diske kaydedilir, Kamil açılır açılmaz arama yapılabilir. İzlenemeyen klasörler (bazı ağ
-paylaşımları) pencere açılırken yeniden taranır.
+- `scripts.default_action: edit` → `Enter` düzenler, `Alt+R` çalıştırır.
+- `scripts.editor`: `auto` (VS Code varsa o), `code`, `notepad`, `default`.
+- `scripts.keep_console_open: false` → script bitince konsol kapanır.
 
-**Sorun bildirmek için:** *Kamil: Diagnostics* sürümü, klasörleri, indeks boyutunu, tuş başı arama süresini
-(p50/p95), VS durumunu ve varsa çökme dökümlerini (`crash-*.dmp`) tek bir raporda açar.
+## Dahili komutlar
 
-## Projeler: build, debug, çalıştır
+Aramada yazarak bulunur (İngilizce veya Türkçe adıyla):
 
-`dev.project_roots` altındaki git depoları ve CMake projeleri aramada çıkar. Bir CMake projesi seçiliyken:
+| Komut | İşlev |
+|---|---|
+| Kamil: Edit settings / *Ayarları düzenle* | `settings.yaml`'ı düzenleyicide açar |
+| Kamil: Open settings folder / *Ayar klasörünü aç* | Ayar, öğrenme ve önbellek dosyalarının klasörü |
+| Kamil: Reload settings / *Ayarları yeniden yükle* | `settings.yaml`'ı yeniden okur (normalde kaydedince otomatik) |
+| Kamil: Rescan / *Yeniden tara* | Uygulamaları, projeleri ve dosyaları yeniden tarar |
+| Kamil: VS jobs / *VS işleri* | Çalışan ve sıradaki VS işleri; iptal |
+| Kamil: Console / *Konsol* | Kamil Console'u açar |
+| Kamil: Forget what was learned / *Öğrenilenleri sıfırla* | Sık kullanılanları ve arama tercihlerini siler |
+| Kamil: Test VS connection / *VS bağlantısını test et* | VS kurulumları, açık örnekler, yönetici durumu, CMake komut adları raporu |
+| Kamil: Diagnostics / *Tanılama* | Sürüm, klasörler, indeks, arama hızı, VS, çökme dökümleri raporu |
+| Kamil: Open log / *Günlüğü aç* | `kamil.log` |
+| Kamil: Quit / *Çıkış* | Kamil'i kapatır |
 
-- `Alt+C` **Configure**: VS'e CMake configure (Generate Cache) gönderilir; bitince hedef listesi arka planda yeniden okunur.
-- `Alt+D` **Debug**: VS'te Build All → başarılıysa program yeni bir konsolda **duraklatılmış** başlatılır → VS debugger'ı
-  bağlanır → program devam eder (`main`'deki breakpoint'ler de tutar). Argümanlar ve COM port tamamen Kamil'den gelir.
-- `Alt+B` **Build**: VS'e `Build.BuildAll` gönderilir; Kamil bitişi izler, sonucu ("✓ 0 hata, 3 uyarı, 41 sn" veya ilk hata)
-  tray'de ve alt bilgi çubuğunda gösterir. Derlemeyi her zaman VS yapar.
-- `Alt+R` **Çalıştır**: son derlenen exe'yi argümanlarla ayrı bir konsolda başlatır.
-- `Ctrl+K`: preset / hedef / COM port seçimi (`Tab` tamamlar), argüman düzenleme, diğer preset'lerin build'lerini
-  ayrı ayrı çalıştırma, Rebuild, CMake configure, önbelleği silip yeniden yapılandırma.
-
-VS seçili klasörü açmamışsa Kamil `devenv "<klasör>"` ile açar ve CMake hazırlığını bekler. Open Folder modunda
-VS **kendi seçili preset'ini** derler; Kamil'deki preset farklıysa uyarır.
-
-**İş kuyruğu.** VS işleri sırayla çalışır. Alt bilgi çubuğu çalışan işi, ne beklediğini ("CMake hazırlanıyor",
-"VS başka build yapıyor", "VS açılıyor") ve `+N sırada` sayısını gösterir. **Kamil: VS jobs** (veya tray menüsü)
-çalışan ve sıradaki işleri listeler; Enter seçili işi iptal eder (çalışan build VS'te de durdurulur). Projenin
-`Ctrl+K` panelinde de o projenin işleri en üstte iptal edilebilir. Her bekleme `dev.vs_wait_seconds` (varsayılan
-90 sn) ile sınırlıdır; aynı iş ikinci kez sıraya alınmaz.
-
-**Sorun giderme.** Yönetici olarak açılmış bir VS'e normal Kamil erişemez (Windows kısıtı): Kamil bunu tespit edip
-söyler, VS'i normal açın ya da Kamil'i de yönetici olarak çalıştırın. Visual Studio bulunamazsa "Visual Studio'da aç"
-eylemi nedenini yazar; `dev.devenv_path` ile yolu verin. Her VS adımı `kamil.log`'a yazılır (**Kamil: Open log**).
-
-İlk kullanımda bir kez **Kamil: VS bağlantısını test et** komutunu çalıştırın: açık VS örneklerini, Output bölmelerini
-ve VS'teki CMake komutlarının adlarını içeren bir rapor açılır. Configure komutu otomatik bulunamazsa rapordaki adı
-`dev.vs_configure_command` ayarına yazın.
-
-## Kamil Console
-
-`Alt+R` ile çalıştırılan programların çıktısı, Visual Studio build'lerinin Build bölmesi ve `console: hidden`
-komutlar **Kamil Console** penceresinde sekme sekme toplanır (*Kamil: Console* veya tray menüsü):
-
-- Her preset/hedef kendi sekmesinde (`SensorUI [x64-debug]`, `SensorUI [x64-release]` yan yana); aynı iş tekrar
-  çalışınca biten sekmesi yeniden kullanılır.
-- MSVC, GCC/Clang hataları ve Python traceback satırları renkli; çift tıklama, `Enter` veya `F8`/`Shift+F8` dosyayı o
-  satırda açar: proje VS'te açıksa VS'te, değilse VS Code'da.
-- `F5` / *Run again* aynı çalıştırmayı tekrarlar, *Stop* Kamil'in başlattığı programı (build sekmesinde VS işini)
-  durdurur. `Ctrl+C` kopyalar (seçim yoksa tümü), `Ctrl+W` sekmeyi kapatır, `Ctrl+Tab` sekmeler arasında gezer.
-- Build başarısız olursa pencere kendiliğinden açılır ve ilk hata seçili gelir (`dev.console_on_build: on_error |
-  always | never`).
-- Klavyeden girdi okuyan programlar için `dev.run_in: console` eski davranışa (ayrı konsol penceresi) döner.
-
-## Özel komutlar ve global kısayollar
-
-`settings.yaml` içindeki `commands:` listesi aramada adıyla çıkar; `hotkey` verilirse Kamil açılmadan, her
-uygulamanın içinden çalışır. Varsayılanlar:
-
-```yaml
-commands:
-  - name: Build last project      # son kullanılan CMake projesi (Alt+B/Alt+D/Alt+C ile en son işlem yapılan)
-    action: build                 # configure | build | rebuild | reconfigure | debug | run | jobs | cancel-jobs
-    hotkey: Ctrl+Alt+B
-  - name: Debug last project
-    action: debug
-    hotkey: Ctrl+Alt+D
-  - name: Configure last project
-    action: configure
-```
-
-Kendi komut satırınız (cmd ile çalışır, `|` ve `&&` kullanılabilir):
-
-```yaml
-  - name: Flash device
-    run: 'py D:\tools\flash.py --port {com} --file "{exe}"'
-    hotkey: Ctrl+Alt+F
-    console: hidden        # keep (varsayılan) | close | hidden: pencere yok, sonuç bildirimde
-  - name: Log ara
-    run: 'findstr /i "{input}" D:\logs\*.log'   # {input} çalıştırırken sorulur
-    confirm: false
-    admin: false
-```
-
-Yer tutucular: `{input}` `{clip}` `{date}` `{time}` ve son projeden `{project}` `{project_dir}` `{preset}` `{target}`
-`{config}` `{exe}` `{exe_dir}` `{com}` `{args}`. Kısayol başka bir programdaysa tray balonu bir kez uyarır.
+**Tray menüsü** (simgeye sağ tık): Kamil'i aç · VS işleri ve tümünü iptal (iş varsa) · Edit settings · Open settings
+folder · Reload settings · ayar sorunları (varsa) · Rescan · Console · Open log · Quit.
 
 ## Ayarlar
 
-İlk çalıştırmada açıklamalı bir `settings.yaml` oluşturulur:
-
 | Mod | Konum |
 |---|---|
-| Normal | `%APPDATA%\Kamil\settings.yaml` (önbellek: `%LOCALAPPDATA%\Kamil\cache`) |
+| Normal | `%APPDATA%\Kamil\settings.yaml` (önbellek ve günlük: `%LOCALAPPDATA%\Kamil\cache`) |
 | Taşınabilir | `Kamil.exe` yanında `data\` klasörü veya `portable.txt` dosyası varsa her şey `data\` altında |
 
-Dosya kaydedildiği anda uygulanır. Hatalı değer varsayılanına döner ve tray balonunda satır
-numarasıyla bildirilir; YAML sözdizimi bozuksa önceki ayarlar korunur. VS Code + YAML eklentisiyle
-açarsanız `schema\settings.json` sayesinde otomatik tamamlama ve hata gösterimi çalışır.
+Dosya kaydedildiği anda uygulanır. Hatalı değer varsayılanına döner ve tray balonunda satır numarasıyla bildirilir;
+YAML sözdizimi bozuksa önceki ayarlar korunur. Her ayarın açıklaması dosyanın içinde yazar. VS Code + YAML eklentisiyle
+açarsan `schema\settings.json` sayesinde otomatik tamamlama ve hata gösterimi çalışır. Windows yollarını **tek
+tırnakla** yaz: `'D:\src'`.
+
+En çok kullanılanlar:
 
 ```yaml
 general:
-  language: auto       # auto | en | tr
-  hotkey: Alt+Space
+  language: auto            # auto | en | tr
+  hotkey: Alt+Space         # Win+Space de olur
+  start_with_windows: false
 appearance:
-  theme: auto          # auto | dark | light
+  theme: auto               # auto | dark | light
   max_rows: 8
 search:
+  folders: [...]            # yukarıda
   exclude_apps: ['*uninstall*', '*kaldır*']
-dev:
-  default_vs: vs2026
-  devenv_path: ''                         # boş: vswhere / standart kurulum klasörleri
-  vs_wait_seconds: 90                     # VS açılışı / CMake hazırlığı için en uzun bekleme
-  project_roots: ['D:\src', 'D:\work']   # git depoları burada aranır
-  repo_action: vs                         # depoda Enter: vs | code | explorer | terminal
-  terminal: wt                            # wt | cmd | powershell | git-bash
-  default_args: '--port {com} --baud 115200'
-  build_before_debug: true
   aliases:
     - alias: code
       target: Visual Studio Code
-    - alias: not defteri
-      target: Notepad
-  folder_priority:                        # bu klasörlerin altındaki sonuçlar öne çıkar
-    - path: 'D:\src\ana-proje'
-      priority: 80                        # -100..100; eksi değer aşağı iter
-    - path: 'D:\eski'
-      priority: -60
+dev:
+  default_vs: vs2026        # vs2026 | vs2022
+  devenv_path: ''           # boş: otomatik (vswhere / standart klasörler)
+  project_roots: ['D:\src', 'D:\work']
+  repo_action: vs           # projede Enter: vs | code | explorer | terminal
+  terminal: wt              # wt | cmd | powershell | git-bash
+  default_args: '--port {com} --baud 115200'
+  build_before_debug: true
+  run_in: kamil             # kamil (Console sekmesi) | console (ayrı pencere)
+  console_on_build: on_error
+  vs_wait_seconds: 90
+commands: [...]             # yukarıda
 ```
 
-## Proje yapısı
+## Sorun giderme
+
+| Sorun | Ne yapmalı |
+|---|---|
+| Kısayol çalışmıyor | Tray balonu "kullanılıyor" dediyse başka kısayol seç. `Win+…` kısayolları yönetici olarak çalışan bir pencere öndeyken çalışmaz. *Kamil: Diagnostics* kısayolun kayıtlı olup olmadığını gösterir. |
+| VS'e gönderilen komut olmuyor | *Kamil: VS jobs* işin neyi beklediğini gösterir; takılan işi oradan iptal et. *Kamil: Test VS connection* raporu ve `kamil.log` ayrıntıyı verir. |
+| "Visual Studio … yönetici olarak çalışıyor" | Normal çalışan Kamil, yönetici olarak açılmış VS'i yönetemez (Windows kısıtı). VS'i normal aç ya da Kamil'i de yönetici olarak çalıştır. |
+| "Visual Studio bulunamadı" / *Open in Visual Studio* uyarı veriyor | `dev.devenv_path` ile `devenv.exe` yolunu ver. |
+| Dosya / script aramada çıkmıyor | Klasörü `search.folders`'a ekle; `exclude_dirs` ve `depth` ayarlarına bak; indeks `max_files`'ta kesildiyse *Diagnostics* söyler. |
+| Program çıktısı geç geliyor / Türkçe karakterler bozuk | Python'a `PYTHONUNBUFFERED` verilir; diğer programlar çıktıyı kendileri tamponluyor olabilir. Kodlama UTF-8 veya OEM olarak otomatik seçilir. |
+| Kamil kapandı | Bir sonraki açılışta balon çıkar; döküm (`crash-*.dmp`) önbellek klasöründedir. *Diagnostics* raporuyla birlikte gönder. |
+
+Kamil'in dosyaları:
+
+| Dosya | Yer | İçerik |
+|---|---|---|
+| `settings.yaml`, `schema\settings.json` | ayar klasörü | Ayarlar ve editör şeması |
+| `usage.tsv`, `projects.tsv`, `last-project.txt` | ayar klasörü | Öğrenme, proje seçimleri, son proje |
+| `kamil.log` | önbellek klasörü | Günlük (VS adımları, taramalar, hatalar) |
+| `diagnostics.txt`, `vs-connection-report.txt` | önbellek klasörü | Son tanılama raporları |
+| `files.bin`, `apps.tsv`, `console-window.txt` | önbellek klasörü | Dosya indeksi, uygulama listesi, konsol penceresi konumu |
+| `crash-*.dmp` | önbellek klasörü | Çökme dökümleri (en yeni 5) |
+
+## Geliştirme
+
+### Derleme (Visual Studio 2026)
+
+1. Visual Studio 2026'da **File → Open → Folder** ile repo klasörünü aç.
+2. Üst çubuktan preset seç: `x64 Release` (veya `x64 Debug`).
+3. **Build → Build All**. Çıktı: `out\build\x64-release\Kamil.exe`
+
+Komut satırından (Developer PowerShell for VS 2026):
+
+```powershell
+cmake --preset x64-release
+cmake --build --preset x64-release
+ctest --preset x64-release        # çekirdek birim testleri
+```
+
+Tek bir `Kamil.exe` üretilir (statik CRT). VS2022 ile de derlenmesi beklenir ama hedef VS2026'dır.
+
+Linux'ta çekirdek testleri, arama hızı ölçümü ve Windows kaynaklarının MinGW ile derleme denetimi yapılabilir:
+
+```sh
+cmake --preset linux-tests && cmake --build --preset linux-tests && ctest --preset linux-tests
+out/build/linux-tests/kamil_bench          # tuş başı arama süresi (Release derlemesiyle anlamlı)
+cmake --preset mingw-check && cmake --build --preset mingw-check
+```
+
+### Proje yapısı
 
 ```
-src/core/       platform bağımsız çekirdek (bulanık arama, ayar altyapısı, öğrenme) — birim testli
-src/platform/   Win32 yardımcıları (tray, ikonlar, dosya izleme, kabuk işlemleri)
+src/core/       platform bağımsız çekirdek (bulanık arama, ayarlar, öğrenme, CMake, konsol tamponu) — birim testli
+src/platform/   Win32: tray, ikonlar, klasör izleme, klavye kancası, süreçler, VS köprüsü (COM/DTE), çökme dökümü
 src/providers/  sonuç kaynakları (uygulamalar, git depoları)
-src/ui/         arama penceresi ve Direct2D çizim katmanı
-src/app/        uygulama: mesaj döngüsü, ayarların uygulanması
-tests/          birim testleri (bağımlılıksız mini çerçeve) + kamil_bench (arama hızı ölçümü)
+src/ui/         arama penceresi ve Kamil Console (Direct2D)
+src/app/        uygulama: ayarların uygulanması, projeler, dosyalar, komutlar, konsol, tanılama
+tests/          birim testleri + kamil_bench
 tools/          vs-probe.ps1: VS2022/2026 DTE (COM) yeteneklerini ölçer
-third_party/    rapidyaml (MIT, tek başlık)
+third_party/    rapidyaml (MIT)
 ```
-
-Linux'ta yalnızca çekirdek testleri ve Windows kaynaklarının MinGW ile derleme denetimi yapılabilir:
-`cmake --preset linux-tests && cmake --build --preset linux-tests && ctest --preset linux-tests`

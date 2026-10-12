@@ -79,6 +79,7 @@ if(WIN32)
         src/platform/crash.cpp
         src/platform/file_watcher.cpp
         src/platform/icon_loader.cpp
+        src/platform/key_hook.cpp
         src/platform/process.cpp
         src/platform/shell.cpp
         src/platform/system_theme.cpp
