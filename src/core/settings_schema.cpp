@@ -241,22 +241,17 @@ Schema build() {
         s.add(std::move(d));
     }
     {
-        auto command = [](const char* name, const char* action, const char* hotkey) {
-            Object o;
-            o.fields = {{"name", Value(name)}, {"action", Value(action)}, {"hotkey", Value(hotkey)}};
-            return o;
-        };
-        auto d = def(keys::kCommands, Kind::ObjectList,
-                     Value::Objects{command("Build last project", "build", "Ctrl+Alt+B"), command("Debug last project", "debug", "Ctrl+Alt+D"),
-                                    command("Configure last project", "configure", "")},
-                     {"Custom commands", "Özel komutlar"},
-                     {"Your own commands: found by name in the search, optionally with a global hotkey that works without opening Kamil. "
-                      "Either 'run' a command line or do an 'action' on the CMake project used last. Placeholders in run/dir: {input} (asked "
-                      "when run), {clip}, {date}, {time}, {project}, {project_dir}, {preset}, {target}, {config}, {exe}, {exe_dir}, {com}, {args}",
-                      "Kendi komutlarınız: aramada adıyla bulunur, isteğe bağlı global kısayolla Kamil açılmadan da çalışır. Ya 'run' ile bir "
-                      "komut satırı çalıştırır ya da son kullanılan CMake projesinde bir 'action' yapar. run/dir içinde yer tutucular: {input} "
-                      "(çalışırken sorulur), {clip}, {date}, {time}, {project}, {project_dir}, {preset}, {target}, {config}, {exe}, {exe_dir}, "
-                      "{com}, {args}"});
+        auto d = def(keys::kCommands, Kind::ObjectList, Value::Objects{}, {"Custom commands", "Özel komutlar"},
+                     {"Your own commands, used inside the Kamil window: found by name or by their 'keyword' in the search, and run with "
+                      "their 'hotkey' while Kamil is open (Kamil never runs them while it is hidden). Either 'run' a command line or do an "
+                      "'action' on the selected CMake project (from the search: the project used last). Placeholders in run/dir: {input} "
+                      "(asked when run), {clip}, {date}, {time}, {project}, {project_dir}, {preset}, {target}, {config}, {exe}, {exe_dir}, "
+                      "{com}, {args}",
+                      "Kamil penceresinde kullanılan kendi komutlarınız: aramada adıyla ya da 'keyword' ile bulunur, Kamil açıkken "
+                      "'hotkey' ile çalışır (Kamil gizliyken asla çalıştırılmaz). Ya 'run' ile bir komut satırı çalıştırır ya da seçili "
+                      "CMake projesinde bir 'action' yapar (aramadan çalıştırılınca: son kullanılan proje). run/dir içinde yer tutucular: "
+                      "{input} (çalışırken sorulur), {clip}, {date}, {time}, {project}, {project_dir}, {preset}, {target}, {config}, {exe}, "
+                      "{exe_dir}, {com}, {args}"});
         d.fields.push_back(field("name", Kind::String, "", {"Shown in the search, e.g. 'Flash device'", "Aramada görünen ad, ör. 'Cihazı flashla'"}, true));
         d.fields.push_back(field("run", Kind::String, "",
                                  {"Command line, run through cmd (pipes and && work), e.g. 'py D:\\tools\\flash.py --port {com}'",
@@ -270,7 +265,11 @@ Schema build() {
             a.choices = {"none", "configure", "build", "rebuild", "reconfigure", "debug", "run", "jobs", "cancel-jobs"};
             d.fields.push_back(std::move(a));
         }
-        d.fields.push_back(field("hotkey", Kind::Hotkey, "", {"Global hotkey, e.g. Ctrl+Alt+F; empty: none", "Global kısayol, ör. Ctrl+Alt+F; boş: yok"}));
+        d.fields.push_back(field("keyword", Kind::String, "", {"Typed exactly in the search, it puts this command first, e.g. 'fl'",
+                                                             "Aramaya tam olarak yazılınca bu komutu en üste getirir, ör. 'fl'"}));
+        d.fields.push_back(field("hotkey", Kind::Hotkey, "",
+                                 {"Shortcut inside the Kamil window (works only while Kamil is open), e.g. Ctrl+Shift+F; empty: none",
+                                  "Kamil penceresi içindeki kısayol (yalnızca Kamil açıkken çalışır), ör. Ctrl+Shift+F; boş: yok"}));
         d.fields.push_back(field("dir", Kind::Path, "", {"Working folder; empty: the project folder, else your user folder",
                                                          "Çalışma klasörü; boş: proje klasörü, yoksa kullanıcı klasörü"}));
         {
@@ -282,7 +281,6 @@ Schema build() {
         }
         d.fields.push_back(field("admin", Kind::Bool, false, {"Run as administrator", "Yönetici olarak çalıştır"}));
         d.fields.push_back(field("confirm", Kind::Bool, false, {"Ask before running", "Çalıştırmadan önce sor"}));
-        d.apply = Apply::Hotkey;
         s.add(std::move(d));
     }
     return s;

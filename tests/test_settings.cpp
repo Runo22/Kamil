@@ -219,10 +219,10 @@ TEST(settings_custom_commands) {
     CHECK_EQ(cmds[0].find("action")->as_string(), std::string("none"));
     CHECK_EQ(cmds[1].find("hotkey")->as_string(), std::string(""));
     CHECK_EQ(cmds[1].find("console")->as_string(), std::string("keep"));
-    // Defaults: build / debug / configure the last project.
+    // No commands by default: Kamil runs nothing on its own.
     const auto default_snapshot = default_settings(builtin_schema());
-    const auto& defaults = default_snapshot->get_objects(keys::kCommands);
-    CHECK_EQ(defaults.size(), 3u);
-    CHECK_EQ(defaults[0].find("action")->as_string(), std::string("build"));
-    CHECK_EQ(defaults[0].find("admin")->as_bool(), false);
+    CHECK(default_snapshot->get_objects(keys::kCommands).empty());
+    auto kw = load_settings_text(builtin_schema(), "commands:\n  - name: Flash\n    run: x\n    keyword: fl\n", "s.yaml");
+    CHECK(kw.diagnostics.empty());
+    CHECK_EQ(kw.settings->get_objects(keys::kCommands)[0].find("keyword")->as_string(), std::string("fl"));
 }

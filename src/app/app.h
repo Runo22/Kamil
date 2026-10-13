@@ -12,6 +12,7 @@
 #include "app/paths.h"
 #include "core/cmake.h"
 #include "core/file_index.h"
+#include "core/hotkey.h"
 #include "core/item.h"
 #include "core/project_state.h"
 #include "core/search.h"
@@ -100,14 +101,17 @@ private:
 
     // Custom commands (app_commands.cpp)
     struct UserCommand {
-        std::wstring name, run, action, hotkey, dir, console;
+        std::wstring name, run, action, keyword, hotkey, dir, console;
+        std::optional<Hotkey> key;  // parsed `hotkey`: works only inside the Kamil window
         bool admin = false, confirm = false;
     };
     void load_user_commands(const Settings& s);
-    void register_command_hotkeys();
+    // A key pressed in the launcher; runs the command bound to it. `selected` is the selected result.
+    bool run_command_hotkey(uint32_t mods, uint32_t vk, const Item* selected);
     void add_user_command_items(std::vector<Item>& items) const;
-    void run_user_command(size_t index, const std::wstring* input = nullptr);
-    std::map<std::string, std::string> placeholder_values(const std::wstring& input);
+    // `project`: the CMake project an action applies to (the selected one); nullptr: the project used last.
+    void run_user_command(size_t index, const std::wstring* input = nullptr, const std::wstring* project = nullptr);
+    std::map<std::string, std::string> placeholder_values(const std::wstring& input, const std::wstring& project);
     void set_last_project(const std::wstring& root);
     void load_last_project();
 
@@ -227,13 +231,11 @@ private:
     std::atomic<ULONGLONG> warm_ms_{0};  // written by the warm thread
     bool crashed_last_time_ = false;
     std::vector<UserCommand> user_commands_;
-    std::vector<int> command_hotkey_ids_;
-    std::wstring failed_command_hotkeys_;
     std::wstring last_project_;  // CMake project acted on last: target of action commands
 
     // Hotkeys with the Windows key go through a keyboard hook (Windows reserves many of them).
     KeyHook key_hook_;
-    std::vector<KeyHook::Binding> hook_main_, hook_commands_;
+    std::vector<KeyHook::Binding> hook_main_;
     bool update_key_hook();
 
     ConsoleWindow console_;

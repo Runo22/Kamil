@@ -12,7 +12,7 @@ Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 [Açma kısayolu](#açma-kısayolu-altspace--winspace) ·
 [Arama penceresi](#arama-penceresi) ·
 [Projeler](#projeler-cmake--visual-studio) ·
-[Her yerden çalışan kısayollar](#her-yerden-çalışan-kısayollar-ve-özel-komutlar) ·
+[Özel komutlar](#özel-komutlar) ·
 [Kamil Console](#kamil-console) ·
 [Dosyalar ve script'ler](#dosyalar-ve-scriptler) ·
 [Dahili komutlar](#dahili-komutlar) ·
@@ -73,6 +73,7 @@ Yazmaya başla: sonuçlar her tuşta güncellenir. Boş pencerede en sık / son 
 | `Ctrl+C` | Metin seçili değilse seçili öğenin yolunu kopyala |
 | `Ctrl+A` `Ctrl+V` `Ctrl+X`, `Ctrl+Backspace` | Arama kutusunda düzenleme (`Ctrl+←/→` kelime kelime) |
 | `Alt+harf` | Seçili öğeye özel hızlı eylem (aşağıdaki tablolar) |
+| Kendi kısayolların | `commands:` içindeki `hotkey`'ler (bkz. [Özel komutlar](#özel-komutlar)) |
 | `Alt+F4` | Pencereyi kapat |
 
 Fareyle de seçilebilir; başka bir yere tıklamak pencereyi kapatır (`general.hide_on_focus_loss`).
@@ -82,7 +83,7 @@ Fareyle de seçilebilir; başka bir yere tıklamak pencereyi kapatır (`general.
 - **Uygulamalar:** Başlat Menüsü ve Store uygulamaları, kendi ikonlarıyla.
 - **Projeler:** `dev.project_roots` altındaki git depoları ve CMake projeleri (dal adıyla).
 - **Dosyalar ve klasörler:** `search.folders` altındaki her şey (Everything gerekmez); yeni dosyalar anında görünür.
-- **Dahili komutlar** (`Kamil: …`) ve kendi **özel komutların**.
+- **Dahili komutlar** (`Kamil: …`) ve kendi **özel komutların** (`keyword` ile kısaltılabilir).
 
 Eşleştirme bulanıktır: harflerin sırayla geçmesi yeter, kelime başları ve baş harfler öne çıkar (`ws` → *Windows
 Security*, `vsc` → *Visual Studio Code*). Türkçe karakterler katlanır: `calisma` → *Çalışma Planı*. Dahili komutlar iki
@@ -144,29 +145,27 @@ VS işleri sırayla çalışır; aynı iş ikinci kez sıraya alınmaz. Alt bilg
   build VS'te de durdurulur.
 - Tray menüsü → *Cancel all VS jobs*.
 
-## Her yerden çalışan kısayollar ve özel komutlar
+## Özel komutlar
 
-Bu kısayollar Kamil'i açmadan, **her uygulamanın içinden** (VS'in içinden de) çalışır:
+Kendi komutlarını `settings.yaml` içindeki `commands:` listesine yazarsın. Komutlar **yalnızca Kamil açıkken** çalışır.
+Kamil gizliyken hiçbir şey çalıştırmaz; tek global kısayol pencereyi açan `general.hotkey`'dir.
 
-| Kısayol | Varsayılan komut |
-|---|---|
-| `Ctrl+Alt+B` | **Build last project**: son kullanılan CMake projesini derler |
-| `Ctrl+Alt+D` | **Debug last project**: derler ve debug eder |
-| — | **Configure last project** (aramada adıyla bulunur; istersen kısayol ver) |
+Bir komutu çalıştırmanın üç yolu var:
 
-*Son kullanılan proje*, Kamil'den en son bir eylem yaptığın (ya da `Enter` ile açtığın) CMake projesidir.
-
-Kısayollar ve komutlar `settings.yaml` içindeki `commands:` listesindedir. Her komut aramada adıyla da çıkar:
+- Aramaya **adını** yazıp `Enter`.
+- `keyword`: aramaya tam bu yazılınca komut en üste gelir (ör. `fl` + `Enter`).
+- `hotkey`: Kamil penceresi açıkken basılan kısayol (ör. `Ctrl+Shift+F`). Kamil'in kendi tuşlarından önce bakılır.
 
 ```yaml
 commands:
-  - name: Build last project
-    action: build             # configure | build | rebuild | reconfigure | debug | run | jobs | cancel-jobs
-    hotkey: Ctrl+Alt+B
   - name: Flash device
     run: 'py D:\tools\flash.py --port {com} --file "{exe}"'   # cmd ile çalışır: | ve && kullanılabilir
-    hotkey: Win+F             # Win'li kısayollar da olur
+    keyword: fl
+    hotkey: Ctrl+Shift+F
     console: hidden           # keep (pencere açık kalır) | close | hidden (Kamil Console'a yazar, sonucu bildirir)
+  - name: Rebuild
+    action: rebuild           # configure | build | rebuild | reconfigure | debug | run | jobs | cancel-jobs
+    hotkey: Ctrl+Shift+B
   - name: Log ara
     run: 'findstr /i "{input}" D:\logs\*.log'   # {input} çalıştırılırken sorulur
     dir: 'D:\logs'
@@ -174,12 +173,11 @@ commands:
     admin: false              # true: yönetici olarak
 ```
 
-Yer tutucular (`run` ve `dir` içinde): `{input}` (sorulur), `{clip}` (pano), `{date}`, `{time}` ve son projeden
-`{project}` `{project_dir}` `{preset}` `{target}` `{config}` `{exe}` `{exe_dir}` `{com}` `{args}`.
-
-Bir kısayol başka bir program tarafından kullanılıyorsa tray balonu bir kez uyarır. Türkçe klavyede `AltGr`, `Ctrl+Alt`
-olarak gelir: `Ctrl+Alt+harf` kısayolları o harfin AltGr karakterini (ör. `AltGr+Q` → `@`) yazdırmaz hale getirebilir;
-sorun olursa kısayolu değiştir.
+- **`action` komutları** (configure, build, debug …) kısayolla çalıştırılınca listede **seçili CMake projesine**
+  uygulanır; proje seçili değilse çalışmaz, uyarır. Aramadan adıyla çalıştırılınca son kullanılan projeye uygulanır.
+- **`run` komutları**ndaki yer tutucular: `{input}` (sorulur), `{clip}` (pano), `{date}`, `{time}` ve seçili (yoksa son
+  kullanılan) projeden `{project}` `{project_dir}` `{preset}` `{target}` `{config}` `{exe}` `{exe_dir}` `{com}` `{args}`.
+- Varsayılan olarak hiç komut yoktur.
 
 ## Kamil Console
 

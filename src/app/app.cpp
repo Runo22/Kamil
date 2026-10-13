@@ -151,6 +151,7 @@ int App::run(HINSTANCE instance, bool autostart) {
     cb.run_action = [this](const Item& parent, const Item& action) { run_action(parent, action.target); };
     cb.footer = [this](const Item* selected, const Item* parent) { return footer_for(selected, parent); };
     cb.quick_action = [this](const Item& item, wchar_t key) { return quick_action(item, key); };
+    cb.command_hotkey = [this](uint32_t mods, uint32_t vk, const Item* selected) { return run_command_hotkey(mods, vk, selected); };
     if (!launcher_.create(instance_, std::move(cb))) {
         MessageBoxW(nullptr, loc(L"The search window could not be created (Direct2D/DirectComposition).",
                                  L"Arama penceresi oluşturulamadı (Direct2D/DirectComposition)."),
@@ -182,9 +183,7 @@ int App::run(HINSTANCE instance, bool autostart) {
 
     if (usage_.dirty()) usage_.save(paths_.usage_file());
     UnregisterHotKey(hwnd_, kHotkeyId);
-    for (int id : command_hotkey_ids_) UnregisterHotKey(hwnd_, id);
     hook_main_.clear();
-    hook_commands_.clear();
     update_key_hook();
     watcher_.stop();
     tray_.destroy();
@@ -312,6 +311,8 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
         if (a && t) search_options_.aliases.push_back({fold(trim(std::wstring_view(widen(a->as_string())))),
                                                        fold(trim(std::wstring_view(widen(t->as_string()))))});
     }
+    for (const auto& c : user_commands_)  // a command's keyword works like an alias for its name
+        if (!c.keyword.empty()) search_options_.aliases.push_back({fold(trim(std::wstring_view(c.keyword))), fold(c.name)});
     search_options_.folder_boosts.clear();
     for (const auto& obj : s.get_objects(keys::kFolderPriority)) {
         const Value* p = obj.find("path");
@@ -351,9 +352,7 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
 }
 
 bool App::update_key_hook() {
-    std::vector<KeyHook::Binding> all = hook_main_;
-    all.insert(all.end(), hook_commands_.begin(), hook_commands_.end());
-    const bool ok = key_hook_.set(std::move(all), hwnd_);
+    const bool ok = key_hook_.set(hook_main_, hwnd_);
     if (!ok) log_line("[hotkey] keyboard hook could not be installed");
     return ok;
 }
@@ -932,8 +931,6 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
                 // Folders that cannot be watched (e.g. some network shares): rescan when the window opens.
                 if (!launcher_.visible() && watched_roots_ < index_roots_ && GetTickCount64() - files_scanned_at_ > 120'000) scan_files();
                 launcher_.toggle();
-            } else if (wp >= 1000) {  // custom command hotkey
-                run_user_command(static_cast<size_t>(wp - 1000));
             }
             return 0;
         case WM_KAMIL_SHOW:

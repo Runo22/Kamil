@@ -21,8 +21,6 @@ namespace kamil {
 
 namespace {
 
-constexpr int kCommandHotkeyBase = 1000;
-
 std::wstring field_text(const Object& o, const char* name) {
     const Value* v = o.find(name);
     return v && std::holds_alternative<std::string>(v->data) ? widen(v->as_string()) : std::wstring();
@@ -58,7 +56,7 @@ std::wstring action_description(const std::wstring& action) {
                               : action == L"debug"       ? L"Debug"
                               : action == L"run"         ? L"Run"
                                                          : L"Build";
-    return fmt(loc(L"{} the project used last", L"Son kullanılan projede {}"), verb);
+    return fmt(loc(L"{}: selected project (from the search: the one used last)", L"{}: seçili proje (aramadan: son kullanılan)"), verb);
 }
 
 std::string now_text(const char* format) {
@@ -74,11 +72,13 @@ std::string now_text(const char* format) {
 
 void App::load_user_commands(const Settings& s) {
     user_commands_.clear();
+    const auto main = parse_hotkey(hotkey_text_);
     for (const auto& o : s.get_objects(keys::kCommands)) {
         UserCommand c;
         c.name = field_text(o, "name");
         c.run = field_text(o, "run");
         c.action = field_text(o, "action");
+        c.keyword = field_text(o, "keyword");
         c.hotkey = field_text(o, "hotkey");
         c.dir = field_text(o, "dir");
         c.console = field_text(o, "console");
@@ -86,44 +86,37 @@ void App::load_user_commands(const Settings& s) {
         c.confirm = field_bool(o, "confirm");
         if (c.action == L"none") c.action.clear();
         if (c.name.empty() || (c.run.empty() && c.action.empty())) continue;
+        if (!c.hotkey.empty()) {
+            c.key = parse_hotkey(narrow(c.hotkey));
+            if (c.key && main && *c.key == *main) {  // the open/close hotkey always wins
+                log_line(L"[commands] " + c.name + L": hotkey is the same as general.hotkey, ignored");
+                c.key.reset();
+            }
+        }
         user_commands_.push_back(std::move(c));
     }
-    register_command_hotkeys();
 }
 
-void App::register_command_hotkeys() {
-    for (int id : command_hotkey_ids_) UnregisterHotKey(hwnd_, id);
-    command_hotkey_ids_.clear();
-    hook_commands_.clear();
-    std::wstring failed;
-    const auto main = parse_hotkey(hotkey_text_);
+bool App::run_command_hotkey(uint32_t mods, uint32_t vk, const Item* selected) {
     for (size_t i = 0; i < user_commands_.size(); ++i) {
         const UserCommand& c = user_commands_[i];
-        if (c.hotkey.empty()) continue;
-        const auto hk = parse_hotkey(narrow(c.hotkey));
-        const int id = kCommandHotkeyBase + static_cast<int>(i);
-        const bool same_as_main = hk && main && hk->mods == main->mods && hk->vk == main->vk;
-        if (hk && !same_as_main && (hk->mods & kModWin)) {  // Win+...: through the keyboard hook
-            hook_commands_.push_back({hk->mods, hk->vk, static_cast<WPARAM>(id)});
-            continue;
+        if (!c.key || c.key->mods != mods || c.key->vk != vk) continue;
+        const bool project_action = !c.action.empty() && c.action != L"jobs" && c.action != L"cancel-jobs";
+        if (project_action) {
+            // Build / configure / ... only on the project selected in the launcher.
+            if (!selected || selected->kind != ItemKind::Repo || !is_project(selected->path)) {
+                notify(c.name, loc(L"Select a CMake project in the list first.", L"Önce listede bir CMake projesi seçin."), Tray::Balloon::Info);
+                return true;
+            }
+            const std::wstring project = selected->path;
+            run_user_command(i, nullptr, &project);
+            return true;
         }
-        if (hk && !same_as_main && RegisterHotKey(hwnd_, id, hk->mods | MOD_NOREPEAT, hk->vk)) {
-            command_hotkey_ids_.push_back(id);
-            continue;
-        }
-        failed += (failed.empty() ? L"" : L", ") + c.hotkey + L" (" + c.name + L")";
+        const std::wstring project = selected && selected->kind == ItemKind::Repo && is_project(selected->path) ? selected->path : std::wstring();
+        run_user_command(i, nullptr, project.empty() ? nullptr : &project);
+        return true;
     }
-    if (!update_key_hook())
-        for (const auto& b : hook_commands_) failed += (failed.empty() ? L"" : L", ") + widen(format_hotkey({b.mods, b.vk}));
-    // Report a conflict once, not on every settings reload.
-    if (!failed.empty() && failed != failed_command_hotkeys_)
-        notify(loc(L"Command hotkey unavailable", L"Komut kısayolu kullanılamıyor"),
-               fmt(loc(L"{} is used by another program or by Kamil itself. Change it under commands: in settings.yaml.",
-                       L"{} başka bir program ya da Kamil tarafından kullanılıyor. settings.yaml → commands: altında değiştirin."),
-                   failed),
-               Tray::Balloon::Warning);
-    if (!failed.empty()) log_line(L"[commands] hotkeys not registered: " + failed);
-    failed_command_hotkeys_ = failed;
+    return false;
 }
 
 void App::add_user_command_items(std::vector<Item>& items) const {
@@ -157,13 +150,13 @@ void App::load_last_project() {
     last_project_ = widen(trim(std::string_view(line)));
 }
 
-std::map<std::string, std::string> App::placeholder_values(const std::wstring& input) {
+std::map<std::string, std::string> App::placeholder_values(const std::wstring& input, const std::wstring& project) {
     std::map<std::string, std::string> v{{"input", narrow(input)},
                                          {"clip", narrow(read_clipboard_text(hwnd_))},
                                          {"date", now_text("%Y-%m-%d")},
                                          {"time", now_text("%H-%M-%S")}};
-    if (!last_project_.empty() && is_project(last_project_)) {
-        const ProjectView& p = project_view(last_project_);
+    if (!project.empty() && is_project(project)) {
+        const ProjectView& p = project_view(project);
         v["project"] = narrow(p.name);
         v["project_dir"] = narrow(p.root);
         v["preset"] = narrow(p.preset_name());
@@ -177,7 +170,7 @@ std::map<std::string, std::string> App::placeholder_values(const std::wstring& i
     return v;
 }
 
-void App::run_user_command(size_t index, const std::wstring* input) {
+void App::run_user_command(size_t index, const std::wstring* input, const std::wstring* project_override) {
     if (index >= user_commands_.size()) return;
     const UserCommand c = user_commands_[index];  // copy: the prompt callback may outlive a settings reload
     log_line(L"[commands] " + c.name);
@@ -195,7 +188,9 @@ void App::run_user_command(size_t index, const std::wstring* input) {
         parent.title = c.name;
         if (!launcher_.visible()) launcher_.show();
         launcher_.prompt(parent, c.name, {}, loc(L"Value for {input}; Enter runs the command", L"{input} değeri; Enter komutu çalıştırır"),
-                         [this, index](const std::wstring& text) { run_user_command(index, &text); });
+                         [this, index, project = project_override ? *project_override : std::wstring()](const std::wstring& text) {
+                             run_user_command(index, &text, project.empty() ? nullptr : &project);
+                         });
         return;
     }
     launcher_.hide();
@@ -208,7 +203,8 @@ void App::run_user_command(size_t index, const std::wstring* input) {
         return;
     }
     if (!c.action.empty()) {
-        if (last_project_.empty() || !is_project(last_project_)) {
+        const std::wstring root = project_override ? *project_override : last_project_;
+        if (root.empty() || !is_project(root)) {
             notify(fmt(loc(L"{}: no project yet", L"{}: henüz proje yok"), c.name),
                    loc(L"Build, debug or configure a CMake project once from the launcher; this command then uses that project.",
                        L"Başlatıcıdan bir CMake projesini bir kez derleyin, debug edin ya da configure edin; bu komut sonra o projeyi kullanır."),
@@ -217,18 +213,19 @@ void App::run_user_command(size_t index, const std::wstring* input) {
         }
         Item item;
         item.kind = ItemKind::Repo;
-        item.key = L"repo:" + last_project_;
-        item.title = std::filesystem::path(last_project_).filename().wstring();
-        item.path = last_project_;
-        item.target = last_project_;
+        item.key = L"repo:" + root;
+        item.title = std::filesystem::path(root).filename().wstring();
+        item.path = root;
+        item.target = root;
         run_project_action(item, L"proj-" + c.action);
         return;
     }
 
-    const auto values = placeholder_values(input ? *input : std::wstring());
+    const std::wstring project = project_override ? *project_override : last_project_;
+    const auto values = placeholder_values(input ? *input : std::wstring(), project);
     const std::wstring line = widen(expand_placeholders(narrow(c.run), values));
     std::wstring dir = expand_env(widen(expand_placeholders(narrow(c.dir), values)));
-    if (dir.empty()) dir = !last_project_.empty() && is_project(last_project_) ? last_project_ : expand_env(L"%USERPROFILE%");
+    if (dir.empty()) dir = !project.empty() && is_project(project) ? project : expand_env(L"%USERPROFILE%");
     const std::wstring cmd = tools_.cmd.empty() ? std::wstring(L"cmd.exe") : tools_.cmd;
 
     if (c.console == L"hidden" && !c.admin) {

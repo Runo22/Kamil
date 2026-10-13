@@ -57,6 +57,9 @@ public:
         std::function<Footer(const Item* selected, const Item* action_parent)> footer;
         // Alt+letter on a result (D = debug, B = build, R = run). Returns true if handled.
         std::function<bool(const Item& item, wchar_t key)> quick_action;
+        // Keys of the user's commands (kMod* + virtual key), checked before Kamil's own keys.
+        // `selected` is the selected result (nullptr if none). Returns true if a command ran.
+        std::function<bool(uint32_t mods, uint32_t vk, const Item* selected)> command_hotkey;
     };
 
     bool create(HINSTANCE instance, Callbacks callbacks);

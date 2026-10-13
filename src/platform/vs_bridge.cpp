@@ -677,16 +677,19 @@ std::wstring summary_line(const std::wstring& verb, const BuildSummary& s, ULONG
     return line;
 }
 
-// Finds a command whose canonical name contains one of `needles` (DTE command names are English
-// regardless of the UI language). The table is large, so results are cached per instance.
-std::wstring discover_command(Disp& dte, std::initializer_list<const wchar_t*> needles, std::map<std::wstring, std::wstring>& cache) {
+// All commands whose canonical name contains one of `needles` (DTE command names are English
+// regardless of the UI language), best first: menu commands ("Project.…") before the
+// Solution Explorer context-menu variants ("OtherContextMenus.…"), which are only enabled
+// while that menu is open. The table is large, so results are cached per needle set.
+std::vector<std::wstring> discover_commands(Disp& dte, std::initializer_list<const wchar_t*> needles,
+                                            std::map<std::wstring, std::vector<std::wstring>>& cache) {
     std::wstring cache_key;
     for (auto n : needles) cache_key += std::wstring(n) + L"|";
     if (auto it = cache.find(cache_key); it != cache.end()) return it->second;
-    std::wstring found;
+    std::vector<std::wstring> found;
     Disp commands = dte.get(L"Commands");
     const long n = commands.get_long(L"Count");
-    for (long i = 1; i <= n && found.empty(); ++i) {
+    for (long i = 1; i <= n; ++i) {
         std::wstring name;
         try {
             name = commands.item(i).get_string(L"Name");
@@ -694,9 +697,20 @@ std::wstring discover_command(Disp& dte, std::initializer_list<const wchar_t*> n
             continue;
         }
         const std::wstring l = lower(name);
-        for (auto needle : needles)
-            if (l.find(needle) != std::wstring::npos) found = name;
+        for (auto needle : needles) {
+            if (l.find(needle) == std::wstring::npos) continue;
+            found.push_back(name);
+            break;
+        }
     }
+    auto rank = [](const std::wstring& name) {
+        const std::wstring l = lower(name);
+        if (l.find(L"contextmenu") != std::wstring::npos) return 2;
+        return l.rfind(L"project.", 0) == 0 ? 0 : 1;
+    };
+    std::stable_sort(found.begin(), found.end(), [&](const auto& a, const auto& b) { return rank(a) < rank(b); });
+    log_line(L"[vs] CMake commands for " + cache_key + L": " + std::to_wstring(found.size()));
+    for (const auto& f : found) log_line(L"[vs]   " + f);
     cache[cache_key] = found;
     return found;
 }
@@ -909,7 +923,7 @@ bool VsBridge::cancel(uint64_t id) {
 
 void VsBridge::run() {
     ComScope com;
-    std::map<std::wstring, std::wstring> command_cache;
+    std::map<std::wstring, std::vector<std::wstring>> command_cache;
     std::map<std::wstring, DWORD> opened;  // folder -> pid of the instance Kamil opened for it
 
     for (;;) {
@@ -953,20 +967,24 @@ void VsBridge::run() {
                 case VsJob::Kind::Configure:
                 case VsJob::Kind::Reconfigure: {
                     const bool re = job.kind == VsJob::Kind::Reconfigure;
-                    std::wstring command = re ? job.reconfigure_command : job.configure_command;
-                    if (command.empty()) {
+                    const std::wstring configured = re ? job.reconfigure_command : job.configure_command;
+                    std::vector<std::wstring> commands;
+                    if (!configured.empty()) {
+                        commands.push_back(configured);
+                    } else {
                         ctx.progress(loc(L"Looking up the CMake command in Visual Studio…", L"Visual Studio'da CMake komutu aranıyor…"));
-                        command = re ? discover_command(dte, {L"deletecache"}, command_cache)
-                                     : discover_command(dte, {L"generatecache", L"configurecache"}, command_cache);
+                        commands = re ? discover_commands(dte, {L"deletecache"}, command_cache)
+                                      : discover_commands(dte, {L"generatecache", L"configurecache"}, command_cache);
                     }
-                    if (command.empty())
+                    if (commands.empty())
                         throw ComError{E_FAIL, fmt(loc(L"Visual Studio has no CMake {} command. Put the name from the \"Kamil: Test VS connection\" "
                                                        L"report into {}.",
                                                        L"Visual Studio'da CMake {} komutu bulunamadı. \"Kamil: VS bağlantısını test et\" raporundaki "
                                                        L"adı {} ayarına yazın."),
                                                    re ? loc(L"delete-cache", L"önbellek silme") : L"configure",
                                                    re ? L"dev.vs_reconfigure_command" : L"dev.vs_configure_command")};
-                    const std::wstring used = execute_command(ctx, dte, {command}, re ? L"dev.vs_reconfigure_command" : L"dev.vs_configure_command");
+                    // Every candidate is tried; the first one Visual Studio has enabled runs.
+                    const std::wstring used = execute_command(ctx, dte, commands, re ? L"dev.vs_reconfigure_command" : L"dev.vs_configure_command");
                     activate(dte);
                     result->ok = true;
                     result->text = fmt(loc(L"✓ {} sent (progress in Visual Studio's Output window)", L"✓ {} gönderildi (ilerleme VS'in Output penceresinde)"), used);

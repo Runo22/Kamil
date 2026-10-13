@@ -7,6 +7,7 @@
 #include <cmath>
 
 #include "core/fuzzy.h"
+#include "core/hotkey.h"
 #include "core/i18n.h"
 #include "core/text.h"
 #include "platform/system_theme.h"
@@ -500,6 +501,21 @@ bool LauncherWindow::on_key(WPARAM vk, bool alt) {
     // so it must not trigger Ctrl shortcuts.
     const bool ctrl = key_down(VK_CONTROL) && !key_down(VK_MENU);
     const bool shift = key_down(VK_SHIFT);
+
+    // The user's command shortcuts (settings.yaml → commands: hotkey) work only here, in the window.
+    if (cb_.command_hotkey && mode_ == Mode::Results && vk != VK_CONTROL && vk != VK_MENU && vk != VK_SHIFT && vk != VK_LWIN && vk != VK_RWIN) {
+        uint32_t mods = 0;
+        if (alt || key_down(VK_MENU)) mods |= kModAlt;
+        if (key_down(VK_CONTROL)) mods |= kModCtrl;
+        if (shift) mods |= kModShift;
+        if (key_down(VK_LWIN) || key_down(VK_RWIN)) mods |= kModWin;
+        const bool fkey = vk >= VK_F1 && vk <= VK_F24;
+        if (fkey || (mods & (kModAlt | kModCtrl | kModWin))) {
+            const Item* sel = selected_ < hits_.size() ? hits_[selected_].item : nullptr;
+            const Item copy = sel ? *sel : Item{};  // the command may rebuild the result list
+            if (cb_.command_hotkey(mods, static_cast<uint32_t>(vk), sel ? &copy : nullptr)) return true;
+        }
+    }
 
     if (alt) {
         if (vk >= '1' && vk <= '9') {

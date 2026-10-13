@@ -788,7 +788,7 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 | Sağlamlaştırma: minidump + "Kamil: Diagnostics", dosya indeksinin canlı güncellenmesi (`ReadDirectoryChangesW`) + disk önbelleği, `kamil_bench` | ✓ |
 | Windows tuşlu kısayollar (`Win+Space` dahil): düşük seviyeli klavye kancası (ayrı iş parçacığında), Başlat menüsü maskelenir; diğerleri `RegisterHotKey` | ✓ |
 | Kamil Console: çalıştırma / VS build / gizli komut çıktıları sekmelerde, hata renklendirme (MSVC, GCC/Clang, Python), F8 / çift tık → VS'te satır (yoksa VS Code), Stop, Run again | ✓ |
-| Özel komutlar (`commands:`): `run` komut satırı veya son projede `action`, yer tutucular, global kısayollar (varsayılan `Ctrl+Alt+B` build, `Ctrl+Alt+D` debug) | ✓ |
+| Özel komutlar (`commands:`): `run` komut satırı veya seçili projede `action`, yer tutucular, `keyword` ve **yalnızca Kamil açıkken** çalışan `hotkey` (karar: Kamil gizliyken hiçbir komut çalışmaz; tek global kısayol pencereyi açan) | ✓ |
 | Hız: File API önbelleği + arka planda ön okuma (Ctrl+K anında), yazarken daraltan + paralel dosya araması (200 bin dosyada tuş başı ~3–10 ms) | ✓ |
 | Eylem paneli, `Tab` tamamlama, alt bilgi çubuğu, iş durumu | ✓ |
 
@@ -807,7 +807,7 @@ Altta her zaman: **Dosyada aç** (ilgili YAML'i VS Code'da açar), **Varsayılan
 
 | İş | Neden | Büyüklük |
 |---|---|---|
-| ~~Özel komutlar + global kısayollar~~ | Yapıldı (v1.2) | — |
+| ~~Özel komutlar (Kamil açıkken kısayol + keyword)~~ | Yapıldı (v1.2); global komut kısayolları kullanıcı isteğiyle kaldırıldı | — |
 | LAN / intranet: yer imleri, UNC yolları, şablonlu URL'ler (`bug 1234`), erişilebilirlik testi (SMB donmasını önler) | İlk istek: "offline olsa bile LAN üzerinden klasör ve web siteleri" | O |
 
 **Faz C — Geliştirici araçları**

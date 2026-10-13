@@ -1,3 +1,4 @@
+#pragma code_page(65001)  // this file is UTF-8
 #include <windows.h>
 #include "resource.h"
 
@@ -16,10 +17,10 @@ FILESUBTYPE 0x0L
 BEGIN
     BLOCK "StringFileInfo"
     BEGIN
-        BLOCK "041F04B0"
+        BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName", "Kamil"
-            VALUE "FileDescription", "Kamil - offline geliştirici başlatıcısı"
+            VALUE "FileDescription", "Kamil - offline developer launcher"
             VALUE "FileVersion", "0.1.0"
             VALUE "InternalName", "Kamil"
             VALUE "OriginalFilename", "Kamil.exe"
@@ -29,6 +30,6 @@ BEGIN
     END
     BLOCK "VarFileInfo"
     BEGIN
-        VALUE "Translation", 0x041F, 1200
+        VALUE "Translation", 0x0409, 1200
     END
 END
