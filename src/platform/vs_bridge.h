@@ -32,6 +32,9 @@ struct VsJob {
     std::wstring devenv;       // devenv.exe of the wanted version
     std::wstring dte_version;  // "18.0" (VS 2026) / "17.0" (VS 2022)
     std::wstring label;        // shown in progress texts, e.g. "x64-debug"
+    // Configure preset chosen in Kamil: Visual Studio is switched to it before the job (empty:
+    // keep whatever VS has selected). The drop-down shows the display name when there is one.
+    std::wstring preset, preset_display;
     uint32_t wait_ms = 90'000; // longest wait for VS to start or to enable a command
 
     // Debug

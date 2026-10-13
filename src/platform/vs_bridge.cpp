@@ -539,6 +539,13 @@ long pane_length(Disp& pane) {
     }
 }
 
+// Sets the value of a toolbar combo command (like choosing it in the drop-down).
+void execute_combo(Disp& dte, const std::wstring& command, const std::wstring& value) {
+    const Variant name = Variant::str(command);
+    const Variant arg = Variant::str(value);
+    dte.invoke(L"ExecuteCommand", {&name, &arg}, DISPATCH_METHOD);
+}
+
 // Pane text from a 1-based character offset to the end.
 std::wstring pane_text_from(Disp& pane, long offset) {
     if (!pane.valid()) return {};
@@ -831,6 +838,32 @@ void goto_location(const Context& ctx, VsEvent& result) {
     result.ok = true;
 }
 
+// Selects the configure preset in Visual Studio's configuration drop-down (the toolbar combo is
+// the "Build.SolutionConfigurations" command; in Open Folder mode it lists the CMake presets).
+// Returns a warning for the result text when VS would not switch, empty on success.
+std::wstring select_preset(const Context& ctx, Disp& dte) {
+    const VsJob& job = ctx.job;
+    ctx.progress(fmt(loc(L"Selecting preset {} in Visual Studio…", L"Visual Studio'da {} preset'i seçiliyor…"), job.preset));
+    std::wstring last_error;
+    for (int attempt = 0; attempt < 10; ++attempt) {  // the drop-down is disabled while CMake is busy
+        for (const std::wstring& value : {job.preset_display, job.preset}) {
+            if (value.empty()) continue;
+            try {
+                execute_combo(dte, L"Build.SolutionConfigurations", value);
+                log_line(L"[vs] #" + std::to_wstring(ctx.job_id) + L" preset selected: " + value);
+                return {};
+            } catch (const ComError& e) {
+                last_error = e.what;
+            }
+        }
+        ctx.wait(1000);
+    }
+    log_line(L"[vs] #" + std::to_wstring(ctx.job_id) + L" preset not selected: " + last_error);
+    return fmt(loc(L"⚠ Visual Studio did not switch to preset {} ({}); it used the preset selected in VS.",
+                   L"⚠ Visual Studio {} preset'ine geçmedi ({}); VS'te seçili preset kullanıldı."),
+               job.preset, last_error);
+}
+
 struct ComScope {
     HRESULT hr;
     RetryFilter filter;
@@ -955,6 +988,7 @@ void VsBridge::run() {
         try {
             ctx.progress(fmt(loc(L"{}: connecting to Visual Studio…", L"{}: Visual Studio'ya bağlanılıyor…"), verb));
             Disp dte = find_or_open(ctx, opened);
+            const std::wstring preset_warning = job.preset.empty() ? std::wstring() : select_preset(ctx, dte);
             switch (job.kind) {
                 case VsJob::Kind::Build:
                 case VsJob::Kind::Rebuild:
@@ -1028,6 +1062,7 @@ void VsBridge::run() {
                 default:
                     break;
             }
+            if (!preset_warning.empty()) result->text += L"\n" + preset_warning;
         } catch (const ComError& e) {
             result->ok = false;
             if (e.hr == E_ABORT && ctx.cancelled()) {

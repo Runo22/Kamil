@@ -130,8 +130,10 @@ Sırasıyla: çalışan işi **iptal et** (varsa) · **Configure** · **Build** 
 diğer preset'lerin build'lerini ayrı ayrı çalıştır · Rebuild · Önbelleği silip yeniden yapılandır · Gezgin, terminal,
 Git Bash, Git GUI, yolu / dal adını kopyala. Listede yazarak süzebilirsin; `Tab` tamamlar.
 
-- **Preset:** `CMakePresets.json` okunur. Seçmezsen VS'te en son configure edilen preset kullanılır. Open Folder'da VS
-  **kendi seçili preset'ini** derler; Kamil'deki seçim farklıysa uyarır.
+- **Preset:** `CMakePresets.json` okunur. Kamil'de bir preset seçersen, Kamil her Configure / Build / Debug işinden önce
+  Visual Studio'nun yapılandırma listesinde de **o preset'i seçer**; böylece VS doğru preset'i derler. VS geçmezse
+  sonuç bildiriminde "⚠ … preset'ine geçmedi" yazar. Seçim yapmazsan Kamil VS'te seçili (en son configure edilen)
+  preset'i kullanır.
 - **COM port:** bağlı seri portlar dostu adlarıyla listelenir; port numarası değişse de cihaz VID/PID ile hatırlanır.
 - **Argümanlar:** proje başına şablon, ör. `--port {com} --baud 115200`. Yer tutucular: `{com}` `{preset}`
   `{target}` `{config}` `{project}`. Boşsa `dev.default_args` kullanılır.

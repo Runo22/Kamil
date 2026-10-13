@@ -20,7 +20,7 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName", "Kamil"
-            VALUE "FileDescription", "Kamil - offline developer launcher"
+            VALUE "FileDescription", "Kamil"
             VALUE "FileVersion", "0.1.0"
             VALUE "InternalName", "Kamil"
             VALUE "OriginalFilename", "Kamil.exe"

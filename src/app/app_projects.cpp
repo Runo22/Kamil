@@ -366,7 +366,7 @@ std::vector<Item> App::project_actions(const Item& repo) {
                                                 : sub({preset, file_exists(v.exe) ? ago(v.exe) : std::wstring(loc(L"not built", L"derlenmemiş")), v.args})));
     list.push_back(make_action(L"pick-preset", L"Preset: " + (preset.empty() ? L"—" : preset), {}, kGlyphPreset,
                                fmt(v.preset_guessed ? loc(L"{} presets, the one configured last in VS", L"{} preset, VS'te son configure edilen")
-                                                    : loc(L"{} presets, chosen in Kamil", L"{} preset, Kamil'de seçilen"),
+                                                    : loc(L"{} presets, chosen in Kamil: selected in VS before each job", L"{} preset, Kamil'de seçilen: her işten önce VS'te seçilir"),
                                    std::to_wstring(v.presets.size()))));
     if (v.executables.size() > 1)
         list.push_back(make_action(L"pick-target", fmt(loc(L"Target: {}", L"Hedef: {}"), target), {}, kGlyphTarget,
@@ -519,13 +519,6 @@ bool App::run_project_action(const Item& repo, const std::wstring& action) {
     if (action.rfind(L"set-preset:", 0) == 0) {
         choice.preset = narrow(action.substr(11));
         save_choice();
-        const ProjectView& v = project_view(repo.path, true);
-        if (const auto guess = guess_active_preset(v.presets); guess && v.presets[*guess].name != choice.preset)
-            notify(fmt(loc(L"Preset changed: {}", L"Preset değişti: {}"), widen(choice.preset)),
-                   fmt(loc(L"The preset configured last in VS is {}. VS builds its own selected preset: change the selection in VS too.",
-                           L"VS'te son configure edilen preset {}. VS'in Build'i kendi seçili preset'ini derler; VS'teki seçimi de değiştirin."),
-                       widen(v.presets[*guess].name)),
-                   Tray::Balloon::Info);
         launcher_.reopen_actions(repo);
         return true;
     }
@@ -615,13 +608,11 @@ void App::submit_vs(VsJob::Kind kind, const Item& repo) {
     job.console_title = L"Kamil ▸ " + v.target_name() + L" [" + v.preset_name() + L"]" + (v.com.empty() ? L"" : L" " + v.com);
     job.configure_command = widen(s->get_string(keys::kVsConfigureCommand));
     job.reconfigure_command = widen(s->get_string(keys::kVsReconfigureCommand));
-    if (kind != VsJob::Kind::Configure && kind != VsJob::Kind::Reconfigure) {
-        if (const auto guess = guess_active_preset(v.presets); guess && *guess != v.preset)
-            notify(loc(L"Preset mismatch possible", L"Preset uyuşmazlığı olabilir"),
-                   fmt(loc(L"Selected: {}, configured last in VS: {}. VS builds its own selected preset.",
-                           L"Seçili: {}, VS'te son configure edilen: {}. VS kendi seçili preset'ini derler."),
-                       v.preset_name(), widen(v.presets[*guess].name)),
-                   Tray::Balloon::Warning);
+    // A preset chosen in Kamil is selected in Visual Studio before the job; without a choice Kamil
+    // follows whatever VS has selected.
+    if (!v.preset_guessed && v.active()) {
+        job.preset = v.preset_name();
+        job.preset_display = widen(v.active()->display_name);
     }
     Job entry;
     entry.kind = kind;
