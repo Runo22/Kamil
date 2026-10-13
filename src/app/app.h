@@ -159,6 +159,7 @@ private:
     void update_job_timer();
     void warm_projects();
     bool is_project(const std::wstring& root) const;
+    bool is_cmake_dir(const std::wstring& dir) const;  // cached is_cmake_project_root
     std::string vs_choice() const;
     void run_command(const std::wstring& id);
     void toggle_from_tray();
@@ -183,6 +184,7 @@ private:
     std::vector<Item> apps_;
     std::vector<RepoInfo> repos_;
     std::unordered_map<std::wstring, ProjectView> projects_;
+    mutable std::unordered_map<std::wstring, bool> cmake_dirs_;  // folder -> is a CMake project root
     ProjectStateStore project_state_;
     std::vector<ComPort> com_ports_;
     bool com_ports_stale_ = true;

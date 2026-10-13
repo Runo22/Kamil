@@ -130,15 +130,12 @@ void App::on_vs_job_console(const VsEvent& e) {
         ConsoleRun run;
         run.vs_job = e.job;
         run.rerun = [this, root, kind] {
-            for (const auto& r : repos_) {
-                if (r.path != root) continue;
-                Item item;
-                item.kind = ItemKind::Repo;
-                item.key = L"repo:" + r.path;
-                item.title = r.name;
-                item.path = item.target = r.path;
-                submit_vs(kind, item);
-            }
+            Item item;
+            item.kind = ItemKind::Repo;
+            item.key = L"repo:" + root;
+            item.title = std::filesystem::path(root).filename().wstring();
+            item.path = item.target = root;
+            submit_vs(kind, item);
         };
         console_runs_[tab] = std::move(run);
         job_tabs_[e.job] = tab;

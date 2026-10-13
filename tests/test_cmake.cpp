@@ -188,3 +188,19 @@ TEST(placeholder_expansion) {
     const std::map<std::string, std::string> v{{"com", "COM7"}, {"preset", "x64-debug"}};
     CHECK_EQ(expand_placeholders("--port {com} --cfg {preset} {unknown} {", v), std::string("--port COM7 --cfg x64-debug {unknown} {"));
 }
+
+TEST(cmake_project_root_detection) {
+    const fs::path root = fresh_dir("kamil_test_cmake_root");
+    write(root / "app" / "CMakeLists.txt", "cmake_minimum_required(VERSION 3.25)\n  PROJECT (Sensor LANGUAGES CXX)\nadd_subdirectory(lib)\n");
+    write(root / "app" / "lib" / "CMakeLists.txt", "add_library(lib STATIC a.cpp)\n# project(x) only in a comment\n");
+    write(root / "part" / "CMakeLists.txt", "add_library(part STATIC a.cpp)\nset(MY_project(1)\n");
+    write(root / "presets" / "CMakeLists.txt", "include(common.cmake)\n");
+    write(root / "presets" / "CMakePresets.json", "{}");
+    fs::create_directories(root / "empty");
+    CHECK(is_cmake_project_root(root / "app"));
+    CHECK(!is_cmake_project_root(root / "app" / "lib"));  // an add_subdirectory part
+    CHECK(!is_cmake_project_root(root / "part"));
+    CHECK(is_cmake_project_root(root / "presets"));
+    CHECK(!is_cmake_project_root(root / "empty"));
+    fs::remove_all(root);
+}

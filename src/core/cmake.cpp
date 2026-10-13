@@ -357,6 +357,27 @@ CodeModel parse_codemodel(const fs::path& reply, const fs::path& build_dir, cons
 
 }  // namespace
 
+bool is_cmake_project_root(const fs::path& dir) {
+    std::error_code ec;
+    if (!fs::is_regular_file(dir / "CMakeLists.txt", ec)) return false;
+    if (fs::is_regular_file(dir / "CMakePresets.json", ec)) return true;
+    std::ifstream in(dir / "CMakeLists.txt", std::ios::binary);
+    std::string text(64 * 1024, '\0');
+    in.read(text.data(), static_cast<std::streamsize>(text.size()));
+    text.resize(static_cast<size_t>(in.gcount()));
+    // project( ... ) at the start of a line, any case, spaces allowed before the parenthesis.
+    for (size_t pos = 0; pos < text.size(); ++pos) {
+        if (pos > 0 && text[pos - 1] != '\n') continue;
+        size_t i = pos;
+        while (i < text.size() && (text[i] == ' ' || text[i] == '\t')) ++i;
+        if (text.size() - i < 8 || to_lower_ascii(std::string_view(text).substr(i, 7)) != "project") continue;
+        i += 7;
+        while (i < text.size() && (text[i] == ' ' || text[i] == '\t')) ++i;
+        if (i < text.size() && text[i] == '(') return true;
+    }
+    return false;
+}
+
 CodeModel read_codemodel(const fs::path& build_dir) {
     std::error_code ec;
     const fs::path reply = build_dir / ".cmake" / "api" / "v1" / "reply";

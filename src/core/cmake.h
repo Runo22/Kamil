@@ -36,6 +36,11 @@ using EnvLookup = std::function<std::optional<std::string>(std::string_view name
 PresetsResult load_cmake_presets(const std::filesystem::path& source_dir, const EnvLookup& env = {},
                                  std::string_view host_system = "Windows");
 
+// A folder that is the root of a CMake project (what Visual Studio's Open Folder expects): it has
+// a CMakeLists.txt that calls project(), or a CMakePresets.json. Folders whose CMakeLists.txt is
+// only an add_subdirectory() part of a bigger project are not roots.
+bool is_cmake_project_root(const std::filesystem::path& dir);
+
 // The preset Visual Studio most likely has selected: the one whose build directory was
 // configured most recently (Open Folder configures the active preset automatically).
 std::optional<size_t> guess_active_preset(const std::vector<ConfigurePreset>& presets);

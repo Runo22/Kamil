@@ -80,7 +80,16 @@ std::wstring ProjectView::target_name() const {
 bool App::is_project(const std::wstring& root) const {
     for (const auto& r : repos_)
         if (r.path == root) return r.cmake;
-    return false;
+    // Found some other way (file search, a folder outside dev.project_roots): a CMake project root
+    // is a project all the same.
+    return is_cmake_dir(root);
+}
+
+bool App::is_cmake_dir(const std::wstring& dir) const {
+    if (dir.empty()) return false;
+    auto it = cmake_dirs_.find(dir);
+    if (it == cmake_dirs_.end()) it = cmake_dirs_.emplace(dir, is_cmake_project_root(dir)).first;
+    return it->second;
 }
 
 std::string App::vs_choice() const { return store_.current()->get_string(keys::kDefaultVs); }

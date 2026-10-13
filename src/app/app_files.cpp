@@ -45,6 +45,7 @@ std::wstring expand_env(const std::wstring& raw) {
 // Indexing
 
 void App::scan_files() {
+    cmake_dirs_.clear();
     const auto s = store_.current();
     std::vector<IndexRoot> roots;
     auto add_root = [&](const std::wstring& raw, int bonus, size_t depth, std::vector<std::wstring> include) {
@@ -117,6 +118,11 @@ void App::scan_files() {
 }
 
 void App::on_fs_changes(const std::vector<FsChange>& changes) {
+    for (const auto& c : changes) {  // a CMakeLists.txt / CMakePresets.json appeared, changed name or went away
+        const std::wstring name = std::filesystem::path(c.path).filename().wstring();
+        if (_wcsicmp(name.c_str(), L"CMakeLists.txt") == 0 || _wcsicmp(name.c_str(), L"CMakePresets.json") == 0)
+            cmake_dirs_.erase(std::filesystem::path(c.path).parent_path().wstring());
+    }
     if (!file_index_) return;
     bool changed = false, rescan = false;
     for (const auto& c : changes) {
@@ -177,6 +183,20 @@ void App::on_files_ready(std::unique_ptr<FileIndex> index) {
 // Search
 
 Item App::make_file_item(const std::wstring& path, bool is_dir) const {
+    if (is_dir && is_cmake_dir(path)) {
+        // A CMake project found by the file search: the same item (and actions) as a scanned project.
+        Item it;
+        it.kind = ItemKind::Repo;
+        it.key = L"repo:" + path;
+        it.title = std::filesystem::path(path).filename().wstring();
+        it.subtitle = L"CMake   " + path;
+        it.target = path;
+        it.path = path;
+        it.icon_source = path;
+        it.icon_key = L"icon:folder";
+        it.prepare();
+        return it;
+    }
     Item it;
     it.kind = is_dir ? ItemKind::Folder : ItemKind::File;
     it.key = L"file:" + path;
@@ -219,7 +239,11 @@ void App::add_file_hits(const std::wstring& query, std::vector<Hit>& hits) {
 
     const std::wstring folded_query = matcher.folded_query();
     for (const auto& m : file_index_->search(matcher, limit, &file_search_)) {
-        query_items_.push_back(make_file_item(file_index_->path(m.entry), file_index_->is_dir(m.entry)));
+        const std::wstring path = file_index_->path(m.entry);
+        // Projects from dev.project_roots are already in the list.
+        if (file_index_->is_dir(m.entry) && std::any_of(repos_.begin(), repos_.end(), [&](const RepoInfo& r) { return r.path == path; }))
+            continue;
+        query_items_.push_back(make_file_item(path, file_index_->is_dir(m.entry)));
         const Item& item = query_items_.back();
         int score = m.score;
         if (search_options_.learning)

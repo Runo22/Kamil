@@ -99,6 +99,12 @@ VS işi), sağda o anda geçerli tuşları gösterir. Sağdaki **tuş çiplerine
 
 ## Projeler (CMake + Visual Studio)
 
+**Proje sayılan klasörler:** `dev.project_roots` altındaki git depoları ve CMake projeleri, ayrıca aramada nereden
+bulunursa bulunsun (ör. `search.folders` içinden) bir **CMake proje kökü**: `project(...)` çağıran bir
+`CMakeLists.txt` ya da `CMakePresets.json` içeren klasör. Büyük bir projenin `add_subdirectory` parçası olan alt
+klasörler proje sayılmaz. Aramada **CMake** yazısıyla görünür; bir klasörün altındaki tüm projelerin her zaman
+listelenmesini istersen o klasörü `dev.project_roots`'a ekle.
+
 Kamil derleme yapmaz: komutları **Visual Studio'ya** (2026 veya 2022, `dev.default_vs`) COM üzerinden gönderir, VS
 derler, Kamil bitişi izler ve sonucu gösterir. Projeler VS'te **Open Folder** ile açılır.
 

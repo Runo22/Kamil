@@ -208,8 +208,7 @@ void App::run_user_command(size_t index, const std::wstring* input) {
         return;
     }
     if (!c.action.empty()) {
-        const auto repo = std::find_if(repos_.begin(), repos_.end(), [&](const RepoInfo& r) { return r.path == last_project_ && r.cmake; });
-        if (repo == repos_.end()) {
+        if (last_project_.empty() || !is_project(last_project_)) {
             notify(fmt(loc(L"{}: no project yet", L"{}: henüz proje yok"), c.name),
                    loc(L"Build, debug or configure a CMake project once from the launcher; this command then uses that project.",
                        L"Başlatıcıdan bir CMake projesini bir kez derleyin, debug edin ya da configure edin; bu komut sonra o projeyi kullanır."),
@@ -218,10 +217,10 @@ void App::run_user_command(size_t index, const std::wstring* input) {
         }
         Item item;
         item.kind = ItemKind::Repo;
-        item.key = L"repo:" + repo->path;
-        item.title = repo->name;
-        item.path = repo->path;
-        item.target = repo->path;
+        item.key = L"repo:" + last_project_;
+        item.title = std::filesystem::path(last_project_).filename().wstring();
+        item.path = last_project_;
+        item.target = last_project_;
         run_project_action(item, L"proj-" + c.action);
         return;
     }
