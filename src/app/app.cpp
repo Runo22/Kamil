@@ -419,6 +419,7 @@ void App::rebuild_items() {
         items.push_back(std::move(it));
     }
     add_user_command_items(items);
+    if (store_.current()->get_bool(keys::kKnownFolders)) add_known_folder_items(items);
     for (const auto& repo : repos_) {
         Item it;
         it.kind = ItemKind::Repo;

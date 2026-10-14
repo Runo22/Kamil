@@ -159,6 +159,13 @@ Schema build() {
               {"Remembers what you pick for which search and ranks accordingly (data stays on this computer)",
                "Hangi aramada neyi seçtiğini hatırlayıp sıralamayı buna göre düzenler (veriler sadece bu bilgisayarda)"}));
     {
+        s.add(def(keys::kKnownFolders, Kind::Bool, true, {"Known folders", "Bilinen klasörler"},
+                  {"Your user folder, Downloads, Desktop, Documents, AppData Roaming / Local / LocalLow, Temp, Program Files, ProgramData, "
+                   "Start Menu, Startup ... in the search, with their own icons (also found as %appdata%, %temp% ...)",
+                   "Kullanıcı klasörün, İndirilenler, Masaüstü, Belgeler, AppData Roaming / Local / LocalLow, Temp, Program Files, "
+                   "ProgramData, Başlat Menüsü, Başlangıç ... aramada kendi ikonlarıyla (%appdata%, %temp% ... diye de bulunur)"}));
+    }
+    {
         auto d = def(keys::kLearningHalfLife, Kind::Duration, Value(int64_t{14} * 86'400'000), {"Learning half-life", "Öğrenme yarı ömrü"},
                      {"Time after which a choice counts half as much", "Bir seçimin etkisinin yarıya inme süresi"});
         d.min = 86'400'000;

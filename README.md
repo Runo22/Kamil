@@ -83,6 +83,10 @@ Fareyle de seçilebilir; başka bir yere tıklamak pencereyi kapatır (`general.
 - **Uygulamalar:** Başlat Menüsü ve Store uygulamaları, kendi ikonlarıyla.
 - **Projeler:** `dev.project_roots` altındaki git depoları ve CMake projeleri (dal adıyla).
 - **Dosyalar ve klasörler:** `search.folders` altındaki her şey (Everything gerekmez); yeni dosyalar anında görünür.
+- **Bilinen klasörler:** kullanıcı klasörün, Downloads, Desktop, Documents, Pictures, Music, Videos, AppData Roaming /
+  Local / LocalLow, Temp, Program Files (x86), ProgramData, Başlat Menüsü, Startup, SendTo, Windows, OneDrive — Windows'un
+  kendi ikonlarıyla. Türkçe adları ve `%appdata%`, `%localappdata%`, `%temp%` gibi yazımlarla da bulunur. `Enter`
+  Gezgin'de açar, `Ctrl+K` VS Code / Visual Studio / terminal / yolu kopyala. Kapatmak için `search.known_folders: false`.
 - **Dahili komutlar** (`Kamil: …`) ve kendi **özel komutların** (`keyword` ile kısaltılabilir).
 
 Eşleştirme bulanıktır: harflerin sırayla geçmesi yeter, kelime başları ve baş harfler öne çıkar (`ws` → *Windows

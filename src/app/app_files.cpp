@@ -8,6 +8,9 @@
 
 #include "app/action_item.h"
 #include "app/app.h"
+
+#include <shlobj.h>  // after app.h, which brings windows.h
+
 #include "core/i18n.h"
 #include "core/log.h"
 #include "core/settings_schema.h"
@@ -177,6 +180,85 @@ void App::on_files_ready(std::unique_ptr<FileIndex> index) {
     SetTimer(hwnd_, kTimerSaveIndex, 5000, nullptr);
     // A visible list keeps its selection; the new index is used from the next keystroke on.
     if (!launcher_.visible()) run_query(launcher_.query());
+}
+
+// ---------------------------------------------------------------------------------------------
+// Known folders: the user folder, Downloads, AppData ... as results with their own shell icons
+
+namespace {
+
+struct KnownFolder {
+    const KNOWNFOLDERID* id;  // nullptr: the temp folder
+    const wchar_t* en;
+    const wchar_t* tr;
+    const wchar_t* keywords;  // extra search words (environment variable names, other spellings)
+};
+
+const KnownFolder kKnownFolders[] = {
+    {&FOLDERID_Profile, nullptr, nullptr, L"user home profile kullanıcı ev %userprofile%"},
+    {&FOLDERID_Desktop, L"Desktop", L"Masaüstü", L"desktop masaustu"},
+    {&FOLDERID_Downloads, L"Downloads", L"İndirilenler", L"downloads indirilenler"},
+    {&FOLDERID_Documents, L"Documents", L"Belgeler", L"documents belgeler my documents"},
+    {&FOLDERID_Pictures, L"Pictures", L"Resimler", L"pictures resimler"},
+    {&FOLDERID_Music, L"Music", L"Müzik", L"music muzik"},
+    {&FOLDERID_Videos, L"Videos", L"Videolar", L"videos videolar"},
+    {&FOLDERID_RoamingAppData, L"AppData Roaming", L"AppData Roaming", L"%appdata% appdata roaming"},
+    {&FOLDERID_LocalAppData, L"AppData Local", L"AppData Local", L"%localappdata% appdata local"},
+    {&FOLDERID_LocalAppDataLow, L"AppData LocalLow", L"AppData LocalLow", L"appdata locallow"},
+    {nullptr, L"Temp", L"Temp (geçici dosyalar)", L"%temp% %tmp% temp gecici"},
+    {&FOLDERID_ProgramFiles, L"Program Files", L"Program Files", L"%programfiles% program files"},
+    {&FOLDERID_ProgramFilesX86, L"Program Files (x86)", L"Program Files (x86)", L"%programfiles(x86)% program files x86"},
+    {&FOLDERID_ProgramData, L"ProgramData", L"ProgramData", L"%programdata% programdata"},
+    {&FOLDERID_Programs, L"Start Menu Programs", L"Başlat Menüsü Programları", L"start menu baslat menusu programs"},
+    {&FOLDERID_Startup, L"Startup", L"Başlangıç", L"startup baslangic autostart shell:startup"},
+    {&FOLDERID_SendTo, L"SendTo", L"Gönder", L"sendto shell:sendto"},
+    {&FOLDERID_Windows, L"Windows", L"Windows", L"%windir% windows"},
+    {&FOLDERID_SkyDrive, L"OneDrive", L"OneDrive", L"onedrive %onedrive%"},
+};
+
+std::wstring known_folder_path(const KnownFolder& f) {
+    if (!f.id) {
+        wchar_t buf[MAX_PATH + 1];
+        const DWORD n = GetTempPathW(MAX_PATH + 1, buf);
+        std::wstring p(buf, n);
+        while (p.size() > 3 && (p.back() == L'\\' || p.back() == L'/')) p.pop_back();
+        return p;
+    }
+    PWSTR raw = nullptr;
+    std::wstring p;
+    if (SUCCEEDED(SHGetKnownFolderPath(*f.id, KF_FLAG_DONT_VERIFY, nullptr, &raw)) && raw) p = raw;
+    CoTaskMemFree(raw);
+    return p;
+}
+
+}  // namespace
+
+void App::add_known_folder_items(std::vector<Item>& items) const {
+    static const std::vector<std::wstring> paths = [] {  // fixed for the session
+        std::vector<std::wstring> out;
+        for (const auto& f : kKnownFolders) out.push_back(known_folder_path(f));
+        return out;
+    }();
+    const bool tr = language() == Lang::Tr;
+    for (size_t i = 0; i < std::size(kKnownFolders); ++i) {
+        const KnownFolder& f = kKnownFolders[i];
+        const std::wstring& path = paths[i];
+        std::error_code ec;
+        if (path.empty() || !std::filesystem::is_directory(path, ec)) continue;  // e.g. no OneDrive
+        Item it;
+        it.kind = ItemKind::Folder;
+        it.key = L"folder:" + path;
+        // The user folder is titled with the user name ("tuna"), the others with their usual name.
+        it.title = f.en ? std::wstring(tr ? f.tr : f.en) : std::filesystem::path(path).filename().wstring();
+        it.subtitle = path;
+        it.target = path;
+        it.path = path;
+        it.icon_source = path;  // the folder's own shell icon (Downloads arrow, Desktop, ...)
+        it.keywords = std::wstring(f.keywords) + L" " + (f.en ? (tr ? f.en : f.tr) : loc(L"User folder", L"Kullanıcı klasörü"));
+        if (!f.en) it.title += loc(L"  (user folder)", L"  (kullanıcı klasörü)");
+        it.prepare();
+        items.push_back(std::move(it));
+    }
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -141,6 +141,7 @@ private:
     void edit_file(const Item& item);
     void open_file(const Item& item, LaunchMode mode);
     std::vector<Item> file_actions(const Item& item) const;
+    void add_known_folder_items(std::vector<Item>& items) const;
     bool run_file_action(const Item& item, const std::wstring& action);
 
     // Projects (app_projects.cpp)
