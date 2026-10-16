@@ -587,12 +587,15 @@ std::vector<std::wstring> build_commands(VsJob::Kind kind) {
 // Starts a build command and waits for it to finish. Primary signal: SolutionBuild.BuildState
 // (in progress -> done). Fallback for project systems that do not report it: the Build pane
 // text stops changing for a few seconds.
+void log_output_panes(Disp& dte);
+
 BuildSummary run_build(const Context& ctx, Disp& dte, VsJob::Kind kind, const std::wstring& verb) {
     Disp pane;
     try {
         pane = find_build_pane(dte);
     } catch (const ComError&) {
     }
+    if (!pane.valid()) log_output_panes(dte);
     // Output is streamed to the console from `streamed` (a 1-based pane offset) on. VS clears
     // the pane when the build starts: a changed beginning of the pane means "read from the top".
     long streamed = pane.valid() ? pane_length(pane) : 1;
@@ -838,30 +841,81 @@ void goto_location(const Context& ctx, VsEvent& result) {
     result.ok = true;
 }
 
-// Selects the configure preset in Visual Studio's configuration drop-down (the toolbar combo is
-// the "Build.SolutionConfigurations" command; in Open Folder mode it lists the CMake presets).
-// Returns a warning for the result text when VS would not switch, empty on success.
-std::wstring select_preset(const Context& ctx, Disp& dte) {
+// Command object by name, or invalid when Visual Studio has no such command.
+Disp command_object(Disp& dte, const std::wstring& name) {
+    try {
+        const Variant n = Variant::str(name);
+        return Disp(dte.get(L"Commands").invoke(L"Item", {&n}).as_dispatch());
+    } catch (const ComError&) {
+        return {};
+    }
+}
+
+bool command_available(Disp& command) {
+    try {
+        return command.valid() && command.invoke(L"IsAvailable").as_long() != 0;
+    } catch (const ComError&) {
+        return false;
+    }
+}
+
+// Selects the configure preset in Visual Studio. In Open Folder (CMake) mode the preset drop-down
+// is its own toolbar combo command (found by name: "...ConfigurePreset..."); a solution uses
+// "Build.SolutionConfigurations". A disabled or missing command fails at once instead of being
+// waited for. Returns a warning for the result text when VS did not switch, empty on success.
+std::wstring select_preset(const Context& ctx, Disp& dte, std::map<std::wstring, std::vector<std::wstring>>& cache) {
     const VsJob& job = ctx.job;
     ctx.progress(fmt(loc(L"Selecting preset {} in Visual Studio…", L"Visual Studio'da {} preset'i seçiliyor…"), job.preset));
-    std::wstring last_error;
-    for (int attempt = 0; attempt < 10; ++attempt) {  // the drop-down is disabled while CMake is busy
+    std::vector<std::wstring> candidates;
+    for (const auto& name : discover_commands(dte, {L"preset"}, cache)) {
+        const std::wstring l = lower(name);
+        if (l.find(L"contextmenu") != std::wstring::npos || l.find(L"build") != std::wstring::npos || l.find(L"test") != std::wstring::npos)
+            continue;  // build / test preset drop-downs and context menus are not the configure preset
+        candidates.push_back(name);
+    }
+    std::stable_partition(candidates.begin(), candidates.end(), [](const std::wstring& n) { return lower(n).find(L"configure") != std::wstring::npos; });
+    candidates.push_back(L"Build.SolutionConfigurations");
+
+    std::wstring last_error, tried;
+    for (const auto& name : candidates) {
+        Disp command = command_object(dte, name);
+        const bool available = command_available(command);
+        tried += (tried.empty() ? L"" : L", ") + name + (command.valid() ? (available ? L" [enabled]" : L" [disabled]") : L" [missing]");
+        if (!available) continue;
         for (const std::wstring& value : {job.preset_display, job.preset}) {
             if (value.empty()) continue;
             try {
-                execute_combo(dte, L"Build.SolutionConfigurations", value);
-                log_line(L"[vs] #" + std::to_wstring(ctx.job_id) + L" preset selected: " + value);
+                execute_combo(dte, name, value);
+                log_line(L"[vs] #" + std::to_wstring(ctx.job_id) + L" preset selected with " + name + L": " + value);
                 return {};
             } catch (const ComError& e) {
                 last_error = e.what;
             }
         }
-        ctx.wait(1000);
     }
-    log_line(L"[vs] #" + std::to_wstring(ctx.job_id) + L" preset not selected: " + last_error);
-    return fmt(loc(L"⚠ Visual Studio did not switch to preset {} ({}); it used the preset selected in VS.",
-                   L"⚠ Visual Studio {} preset'ine geçmedi ({}); VS'te seçili preset kullanıldı."),
-               job.preset, last_error);
+    log_line(L"[vs] #" + std::to_wstring(ctx.job_id) + L" preset not selected; tried: " + tried + (last_error.empty() ? L"" : L"; " + last_error));
+    return fmt(loc(L"⚠ Visual Studio did not switch to preset {}; it used the preset selected in VS (commands: {}).",
+                   L"⚠ Visual Studio {} preset'ine geçmedi; VS'te seçili preset kullanıldı (komutlar: {})."),
+               job.preset, tried);
+}
+
+// Lists the Output panes in the log once per session: which pane a build writes to differs
+// between Visual Studio versions and project types.
+void log_output_panes(Disp& dte) {
+    static bool done = false;
+    if (done) return;
+    done = true;
+    try {
+        Disp panes = dte.get(L"ToolWindows").get(L"OutputWindow").get(L"OutputWindowPanes");
+        const long n = panes.get_long(L"Count");
+        for (long i = 1; i <= n; ++i) {
+            Disp pane = panes.item(i);
+            log_line(L"[vs] output pane: " + pane.get_string(L"Name") + L"  " + pane.get_string(L"Guid"));
+        }
+        if (n == 0) log_line("[vs] no output panes");
+    } catch (const ComError& e) {
+        log_line(L"[vs] output panes not readable: " + e.what);
+    }
 }
 
 struct ComScope {
@@ -988,7 +1042,7 @@ void VsBridge::run() {
         try {
             ctx.progress(fmt(loc(L"{}: connecting to Visual Studio…", L"{}: Visual Studio'ya bağlanılıyor…"), verb));
             Disp dte = find_or_open(ctx, opened);
-            const std::wstring preset_warning = job.preset.empty() ? std::wstring() : select_preset(ctx, dte);
+            const std::wstring preset_warning = job.preset.empty() ? std::wstring() : select_preset(ctx, dte, command_cache);
             switch (job.kind) {
                 case VsJob::Kind::Build:
                 case VsJob::Kind::Rebuild:
