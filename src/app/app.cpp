@@ -336,6 +336,8 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
 
     exclude_patterns_.clear();
     for (const auto& g : s.get_list(keys::kExcludeApps)) exclude_patterns_.push_back(fold(widen(g)));
+    bring_running_patterns_.clear();
+    for (const auto& g : s.get_list(keys::kBringRunning)) bring_running_patterns_.push_back(fold(widen(g)));
     if (git_) git_->configure(tools_.git, s.get_bool(keys::kGitStatus));
     if (touched(keys::kProjectRoots) || touched(keys::kScanDepth) || touched(keys::kScanExclude)) scan_repos();
     if (!initial && touched(keys::kDevenvPath)) {
@@ -485,6 +487,10 @@ void App::on_activate(const Item& item, LaunchMode mode) {
         run_action(item, action);
         return;
     }
+    // Programs listed in apps.bring_running: the running window comes here instead of a second copy.
+    if (mode == LaunchMode::Normal && (item.kind == ItemKind::App || item.kind == ItemKind::File) && wants_running_window(item) &&
+        bring_running(item))
+        return;
     if (item.kind == ItemKind::File || item.kind == ItemKind::Folder) {
         open_file(item, mode);
         return;
@@ -652,6 +658,13 @@ std::vector<Item> App::actions_for(const Item& item) const {
             actions = file_actions(item);
             break;
         default: {
+            if (running_window(item)) {
+                Item bring = make_action(L"bring-running", loc(L"Bring the running window here", L"Açık pencereyi buraya getir"), {}, 0,
+                                         loc(L"Current virtual desktop, same monitor", L"Bulunduğun sanal masaüstü, aynı monitör"));
+                bring.key = item.key;
+                bring.icon_source = item.icon_source;
+                actions.push_back(std::move(bring));
+            }
             Item open = make_action(L"open", loc(L"Open", L"Aç"), item.target, 0);
             open.key = item.key;  // reuse the item's own icon
             actions.push_back(std::move(open));
@@ -672,6 +685,11 @@ void App::run_action(const Item& parent, const std::wstring& action) {
         schedule_usage_save();
     }
     if (run_job_action(parent, action)) return;
+    if (action == L"bring-running") {
+        if (!bring_running(parent))
+            notify(parent.title, loc(L"It is not running any more.", L"Artık çalışmıyor."), Tray::Balloon::Info);
+        return;
+    }
     if (parent.kind == ItemKind::Command) {
         launcher_.hide();
         run_command(parent.target);

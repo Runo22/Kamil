@@ -495,6 +495,9 @@ std::vector<Item> App::file_actions(const Item& item) const {
 
     const std::wstring ext = lower_ext(item.path);
     const bool script = is_script_extension(ext);
+    if ((ext == L".exe" || ext == L".lnk") && running_window(item))
+        list.push_back(with_icon_of_item(make_action(L"bring-running", loc(L"Bring the running window here", L"Açık pencereyi buraya getir"), {},
+                                                     0, loc(L"Current virtual desktop, same monitor", L"Bulunduğun sanal masaüstü, aynı monitör"))));
     Item run = with_icon_of_item(
         make_action(script ? L"file-run" : L"file-open", script ? loc(L"Run", L"Çalıştır") : loc(L"Open", L"Aç"), {}, kGlyphPlay, item.path));
     Item edit = make_action(L"file-edit", fmt(loc(L"Edit — {}", L"Düzenle — {}"), editor_name), editor_exe, 0, item.path);
@@ -539,6 +542,39 @@ bool App::run_file_action(const Item& item, const std::wstring& action) {
     else if (action == L"dir-code") run_action(as_dir_item(dir), L"code");
     else if (action == L"dir-vs") run_action(as_dir_item(dir), L"vs");
     else return false;
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Running programs
+
+std::wstring App::exe_of(const Item& item) const {
+    std::wstring path = item.path;
+    if (item.kind == ItemKind::File && lower_ext(path) == L".lnk") path = shortcut_target(path);
+    return lower_ext(path) == L".exe" ? path : std::wstring();
+}
+
+bool App::wants_running_window(const Item& item) const {
+    if (bring_running_patterns_.empty()) return false;
+    const std::wstring exe = exe_of(item);
+    const std::wstring exe_name = fold(std::filesystem::path(exe).filename().wstring());
+    for (const auto& p : bring_running_patterns_)
+        if ((!exe_name.empty() && glob_match(p, exe_name)) || glob_match(p, item.title_folded)) return true;
+    return false;
+}
+
+HWND App::running_window(const Item& item) const {
+    const std::wstring exe = exe_of(item);
+    return exe.empty() ? nullptr : find_program_window(std::filesystem::path(exe).filename().wstring());
+}
+
+bool App::bring_running(const Item& item) {
+    const HWND hwnd = running_window(item);
+    if (!hwnd) return false;
+    launcher_.hide();
+    std::wstring note;
+    bring_window_here(hwnd, &note);
+    log_line(L"[apps] brought the running window of " + item.title + (note.empty() ? L"" : L": " + note));
     return true;
 }
 

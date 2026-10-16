@@ -87,6 +87,7 @@ if(WIN32)
         src/platform/tree_watcher.cpp
         src/platform/tray.cpp
         src/platform/vs_bridge.cpp
+        src/platform/window_focus.cpp
         src/providers/apps_provider.cpp
         src/providers/repo_provider.cpp
         src/ui/console_window.cpp

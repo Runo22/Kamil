@@ -28,6 +28,7 @@
 #include "platform/shell.h"
 #include "platform/tray.h"
 #include "platform/vs_bridge.h"
+#include "platform/window_focus.h"
 #include "providers/apps_provider.h"
 #include "providers/repo_provider.h"
 #include "ui/console_window.h"
@@ -142,6 +143,12 @@ private:
     void open_file(const Item& item, LaunchMode mode);
     std::vector<Item> file_actions(const Item& item) const;
     void add_known_folder_items(std::vector<Item>& items) const;
+
+    // Running programs (apps.bring_running)
+    std::wstring exe_of(const Item& item) const;          // the program an app / .exe / .lnk item starts
+    bool wants_running_window(const Item& item) const;    // listed in apps.bring_running
+    HWND running_window(const Item& item) const;
+    bool bring_running(const Item& item);                 // false: not running
     bool run_file_action(const Item& item, const std::wstring& action);
 
     // Projects (app_projects.cpp)
@@ -185,6 +192,7 @@ private:
     UsageStore usage_;
     SearchOptions search_options_;
     std::vector<std::wstring> exclude_patterns_;  // folded globs
+    std::vector<std::wstring> bring_running_patterns_;  // folded globs (apps.bring_running)
 
     std::vector<Item> apps_;
     std::vector<RepoInfo> repos_;

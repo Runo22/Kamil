@@ -97,6 +97,22 @@ Kamil seçimlerinden öğrenir: bir yazışta sık seçtiğin sonuç o yazışta
 bu bilgisayarda, `usage.tsv`). Sıfırlamak için *Kamil: Forget what was learned*. Takma ad tanımlayabilirsin:
 `search.aliases` (ör. `code` → *Visual Studio Code*).
 
+### Açık programı getir
+
+Bazı programların ikinci kopyası açılmasın, açık olanı gelsin istiyorsan onları listeye yaz:
+
+```yaml
+apps:
+  bring_running: ['Code.exe', 'notepad++.exe', 'TeraTerm*', 'Outlook']   # exe adı ya da uygulama adı, '*' olur
+```
+
+Listedeki bir program zaten açıksa `Enter` yeni kopya başlatmaz: açık penceresini **bulunduğun sanal masaüstüne taşır**,
+küçültülmüşse açar ve öne getirir; pencere **aynı monitörde ve yerinde** kalır. Açık değilse normal başlatır. Listede
+olmayan programlar için de, açıksa `Ctrl+K` → **Bring the running window here** bir kerelik aynı şeyi yapar.
+
+Sanal masaüstü değiştirme Windows 10'un (22H2 dahil) iç arayüzüyle yapılır. Bir Windows sürümünde bu çalışmazsa pencere
+yine öne gelir, ama Windows seni onun masaüstüne geçirir; nedeni `kamil.log`'a yazılır.
+
 ### Alt bilgi çubuğu
 
 Pencerenin altındaki satır solda seçili öğenin bağlamını (git dalı, değişiklik sayısı, preset, hedef, COM port, çalışan

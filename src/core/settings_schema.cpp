@@ -247,6 +247,14 @@ Schema build() {
                          "Visual Studio açılana ya da bir komutu etkinleştirene kadar (ör. CMake hazırlanırken) en çok kaç saniye beklensin. Bekleyen işler 'Kamil: VS işleri' ile iptal edilebilir"});
         s.add(std::move(d));
     }
+    s.set_section_title("apps", "Applications", "Uygulamalar");
+    s.add(def(keys::kBringRunning, Kind::GlobList, Value::List{}, {"Bring the running window", "Açık pencereyi getir"},
+              {"Programs that are not started a second time: when one is already running, Enter brings its window to the front on "
+               "the current virtual desktop (restored if minimized, on the same monitor). Exe names or app names, '*' allowed. "
+               "Example: ['Code.exe', 'notepad++.exe', 'TeraTerm*', 'Outlook']",
+               "İkinci kez başlatılmayacak programlar: zaten açıksa Enter penceresini bulunduğun sanal masaüstüne taşıyıp öne getirir "
+               "(küçültülmüşse açar, monitörü değişmez). Exe adları ya da uygulama adları, '*' kullanılabilir. Örnek: ['Code.exe', "
+               "'notepad++.exe', 'TeraTerm*', 'Outlook']"}));
     {
         auto d = def(keys::kCommands, Kind::ObjectList, Value::Objects{}, {"Custom commands", "Özel komutlar"},
                      {"Your own commands, used inside the Kamil window: found by name or by their 'keyword' in the search, and run with "

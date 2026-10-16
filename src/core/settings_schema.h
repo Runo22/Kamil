@@ -56,6 +56,9 @@ inline constexpr const char* kVsWaitSeconds = "dev.vs_wait_seconds";
 inline constexpr const char* kRunIn = "dev.run_in";
 inline constexpr const char* kConsoleOnBuild = "dev.console_on_build";
 
+// Applications
+inline constexpr const char* kBringRunning = "apps.bring_running";
+
 // Custom commands (a top-level list)
 inline constexpr const char* kCommands = "commands";
 }  // namespace keys
