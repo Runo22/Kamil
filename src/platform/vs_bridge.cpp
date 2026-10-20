@@ -1,6 +1,7 @@
 #include "platform/vs_bridge.h"
 
 #include <objbase.h>  // after vs_bridge.h, which brings windows.h
+#include <uiautomation.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -492,8 +493,21 @@ std::wstring execute_command(const Context& ctx, Disp& dte, const std::vector<st
     }
 }
 
+// The Output window's pane collection. DTE2.ToolWindows is not always reachable through the
+// IDispatch Visual Studio puts in the ROT (it can expose only the older _DTE members), so the
+// window is also looked up by its kind GUID through DTE.Windows, which every version has.
+Disp output_panes(Disp& dte) {
+    try {
+        return dte.get(L"ToolWindows").get(L"OutputWindow").get(L"OutputWindowPanes");
+    } catch (const ComError&) {
+    }
+    const Variant kind = Variant::str(L"{34E76E81-EE4A-11D0-AE2E-00A0C90FFFC3}");  // vsWindowKindOutput
+    Disp window(dte.get(L"Windows").invoke(L"Item", {&kind}).as_dispatch());
+    return window.get(L"Object").get(L"OutputWindowPanes");
+}
+
 Disp find_build_pane(Disp& dte) {
-    Disp panes = dte.get(L"ToolWindows").get(L"OutputWindow").get(L"OutputWindowPanes");
+    Disp panes = output_panes(dte);
     const long n = panes.get_long(L"Count");
     Disp by_name;
     for (long i = 1; i <= n; ++i) {
@@ -651,8 +665,13 @@ BuildSummary run_build(const Context& ctx, Disp& dte, VsJob::Kind kind, const st
             saw_output = true;
             stream();
             if (!saw_progress) {
-                const std::wstring tail = pane_tail(pane, 200);
-                if (tail.find(L"All succeeded") != std::wstring::npos || tail.find(L"All failed") != std::wstring::npos) break;
+                // The end-of-build line: "Build All succeeded." (CMake), "========== Build: 1 succeeded" (MSBuild).
+                const std::wstring tail = pane_tail(pane, 300);
+                bool done = false;
+                for (const wchar_t* end : {L"All succeeded", L"All failed", L"Build succeeded", L"Build failed", L"========== Build:",
+                                           L"========== Rebuild", L"========== Clean"})
+                    done |= tail.find(end) != std::wstring::npos;
+                if (done) break;
             }
         }
         // Project systems that never report BuildState: treat 15 s without new output as done.
@@ -749,6 +768,8 @@ void activate(Disp& dte) {
     }
 }
 
+std::vector<std::pair<std::wstring, std::wstring>> toolbar_combos(Disp& dte);
+
 void diagnose(const Context& ctx, VsEvent& result) {
     std::wostringstream out;
     out << loc(L"Kamil — Visual Studio connection report\n\n", L"Kamil — Visual Studio bağlantı raporu\n\n");
@@ -770,13 +791,19 @@ void diagnose(const Context& ctx, VsEvent& result) {
             try {
                 out << loc(L"  Version: ", L"  Sürüm: ") << inst.dte.get_string(L"Version") << L"\n";
                 out << L"  BuildState: " << build_state(inst.dte) << loc(L"  (1 not started, 2 in progress, 3 done)\n", L"  (1 başlamadı, 2 sürüyor, 3 bitti)\n");
-                Disp panes = inst.dte.get(L"ToolWindows").get(L"OutputWindow").get(L"OutputWindowPanes");
-                const long n = panes.get_long(L"Count");
                 out << loc(L"  Output panes:\n", L"  Output bölmeleri:\n");
-                for (long i = 1; i <= n; ++i) {
-                    Disp pane = panes.item(i);
-                    out << L"    " << pane.get_string(L"Name") << L"  " << pane.get_string(L"Guid") << L"\n";
+                try {
+                    Disp panes = output_panes(inst.dte);
+                    const long n = panes.get_long(L"Count");
+                    for (long i = 1; i <= n; ++i) {
+                        Disp pane = panes.item(i);
+                        out << L"    " << pane.get_string(L"Name") << L"  " << pane.get_string(L"Guid") << L"\n";
+                    }
+                } catch (const ComError& e) {
+                    out << L"    " << e.what << L"\n";
                 }
+                out << loc(L"  Toolbar drop-downs (UI Automation: name = current value):\n", L"  Araç çubuğu açılır listeleri (UI Automation: ad = değer):\n");
+                for (const auto& [name, value] : toolbar_combos(inst.dte)) out << L"    \"" << name << L"\" = \"" << value << L"\"\n";
                 out << loc(L"  CMake / build / debug commands (x = enabled now):\n", L"  CMake / build / debug komutları (x = şu an etkin):\n");
                 Disp commands = inst.dte.get(L"Commands");
                 const long count = commands.get_long(L"Count");
@@ -859,10 +886,184 @@ bool command_available(Disp& command) {
     }
 }
 
-// Selects the configure preset in Visual Studio. In Open Folder (CMake) mode the preset drop-down
-// is its own toolbar combo command (found by name: "...ConfigurePreset..."); a solution uses
-// "Build.SolutionConfigurations". A disabled or missing command fails at once instead of being
-// waited for. Returns a warning for the result text when VS did not switch, empty on success.
+// ---------------------------------------------------------------------------------------------
+// Toolbar drop-downs through UI Automation. In Visual Studio 2026's Open Folder (CMake) mode the
+// configure preset list is not a command (the log showed no command with "preset" in its name),
+// so it is driven like a user would: find the drop-down that shows one of the project's presets,
+// open it, select the wanted item, close it.
+
+const CLSID kClsidCUIAutomation = {0xff48dba4, 0x60ef, 0x4201, {0xaa, 0x87, 0x54, 0x10, 0x3e, 0xef, 0x59, 0x4e}};
+
+std::wstring take_bstr(BSTR b) {
+    std::wstring s = b ? std::wstring(b, SysStringLen(b)) : std::wstring();
+    SysFreeString(b);
+    return s;
+}
+
+struct Uia {
+    ComPtr<IUIAutomation> uia;
+    ComPtr<IUIAutomationElement> root;  // Visual Studio's main window
+};
+
+bool open_uia(Disp& dte, Uia* out) {
+    HWND hwnd = nullptr;
+    try {
+        hwnd = reinterpret_cast<HWND>(static_cast<intptr_t>(dte.get(L"MainWindow").get_long(L"HWnd")));
+    } catch (const ComError&) {
+        return false;
+    }
+    if (!hwnd) return false;
+    if (FAILED(CoCreateInstance(kClsidCUIAutomation, nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation),
+                                reinterpret_cast<void**>(out->uia.GetAddressOf()))))
+        return false;
+    return SUCCEEDED(out->uia->ElementFromHandle(hwnd, &out->root)) && out->root;
+}
+
+ComPtr<IUIAutomationElementArray> find_all(Uia& u, IUIAutomationElement* from, int control_type) {
+    VARIANT v;
+    VariantInit(&v);
+    v.vt = VT_I4;
+    v.lVal = control_type;
+    ComPtr<IUIAutomationCondition> cond;
+    ComPtr<IUIAutomationElementArray> found;
+    if (SUCCEEDED(u.uia->CreatePropertyCondition(UIA_ControlTypePropertyId, v, &cond))) from->FindAll(TreeScope_Descendants, cond.Get(), &found);
+    return found;
+}
+
+int count_of(IUIAutomationElementArray* a) {
+    int n = 0;
+    if (!a || FAILED(a->get_Length(&n))) return 0;
+    return n;
+}
+
+ComPtr<IUIAutomationElement> element_at(IUIAutomationElementArray* a, int i) {
+    ComPtr<IUIAutomationElement> e;
+    a->GetElement(i, &e);
+    return e;
+}
+
+std::wstring element_name(IUIAutomationElement* e) {
+    BSTR b = nullptr;
+    return SUCCEEDED(e->get_CurrentName(&b)) ? take_bstr(b) : std::wstring();
+}
+
+std::wstring combo_value(IUIAutomationElement* e) {
+    ComPtr<IUIAutomationValuePattern> value;
+    if (SUCCEEDED(e->GetCurrentPatternAs(UIA_ValuePatternId, __uuidof(IUIAutomationValuePattern), reinterpret_cast<void**>(value.GetAddressOf()))) &&
+        value) {
+        BSTR b = nullptr;
+        if (SUCCEEDED(value->get_CurrentValue(&b))) {
+            std::wstring s = take_bstr(b);
+            if (!s.empty()) return s;
+        }
+    }
+    ComPtr<IUIAutomationSelectionPattern> selection;
+    if (SUCCEEDED(e->GetCurrentPatternAs(UIA_SelectionPatternId, __uuidof(IUIAutomationSelectionPattern),
+                                         reinterpret_cast<void**>(selection.GetAddressOf()))) &&
+        selection) {
+        ComPtr<IUIAutomationElementArray> items;
+        if (SUCCEEDED(selection->GetCurrentSelection(&items)) && count_of(items.Get()) > 0) return element_name(element_at(items.Get(), 0).Get());
+    }
+    return {};
+}
+
+bool same_text(const std::wstring& a, const std::wstring& b) { return !a.empty() && lower(a) == lower(b); }
+
+// Every drop-down of the main window as (name, current value), for the connection report.
+std::vector<std::pair<std::wstring, std::wstring>> toolbar_combos(Disp& dte) {
+    std::vector<std::pair<std::wstring, std::wstring>> out;
+    Uia u;
+    if (!open_uia(dte, &u)) return out;
+    auto combos = find_all(u, u.root.Get(), UIA_ComboBoxControlTypeId);
+    for (int i = 0; i < count_of(combos.Get()); ++i) {
+        auto e = element_at(combos.Get(), i);
+        if (e) out.emplace_back(element_name(e.Get()), combo_value(e.Get()));
+    }
+    return out;
+}
+
+// Selects the job's preset in the drop-down that currently shows one of the project's presets
+// (a "configure" one is preferred over build / test preset drop-downs).
+bool select_preset_ui(Disp& dte, const VsJob& job, std::wstring* detail) {
+    Uia u;
+    if (!open_uia(dte, &u)) {
+        *detail = L"UI Automation is not available";
+        return false;
+    }
+    const std::wstring wanted[] = {job.preset_display, job.preset};
+    auto is_wanted = [&](const std::wstring& s) { return same_text(s, wanted[0]) || same_text(s, wanted[1]); };
+    auto is_known = [&](const std::wstring& s) {
+        if (is_wanted(s)) return true;
+        for (const auto& p : job.preset_names)
+            if (same_text(s, p)) return true;
+        return false;
+    };
+    auto combos = find_all(u, u.root.Get(), UIA_ComboBoxControlTypeId);
+    ComPtr<IUIAutomationElement> combo;
+    int best = 3;
+    std::wstring seen;
+    for (int i = 0; i < count_of(combos.Get()); ++i) {
+        auto e = element_at(combos.Get(), i);
+        if (!e) continue;
+        const std::wstring name = element_name(e.Get()), value = combo_value(e.Get());
+        seen += (seen.empty() ? L"" : L", ") + name + L"=" + value;
+        if (!is_known(value)) continue;
+        const std::wstring l = lower(name);
+        const int rank = l.find(L"configure") != std::wstring::npos                                     ? 0
+                         : l.find(L"build") != std::wstring::npos || l.find(L"test") != std::wstring::npos ? 2
+                                                                                                         : 1;
+        if (rank < best) {
+            best = rank;
+            combo = e;
+        }
+    }
+    if (!combo) {
+        *detail = L"no drop-down shows a preset of this project (" + seen + L")";
+        return false;
+    }
+    if (is_wanted(combo_value(combo.Get()))) return true;  // already selected
+
+    ComPtr<IUIAutomationExpandCollapsePattern> expand;
+    combo->GetCurrentPatternAs(UIA_ExpandCollapsePatternId, __uuidof(IUIAutomationExpandCollapsePattern), reinterpret_cast<void**>(expand.GetAddressOf()));
+    if (expand) {
+        expand->Expand();
+        Sleep(300);  // the list is filled when it opens
+    }
+    bool picked = false;
+    auto items = find_all(u, combo.Get(), UIA_ListItemControlTypeId);
+    for (int i = 0; i < count_of(items.Get()) && !picked; ++i) {
+        auto item = element_at(items.Get(), i);
+        if (!item || !is_wanted(element_name(item.Get()))) continue;
+        ComPtr<IUIAutomationSelectionItemPattern> select;
+        if (SUCCEEDED(item->GetCurrentPatternAs(UIA_SelectionItemPatternId, __uuidof(IUIAutomationSelectionItemPattern),
+                                                reinterpret_cast<void**>(select.GetAddressOf()))) &&
+            select && SUCCEEDED(select->Select())) {
+            picked = true;
+            continue;
+        }
+        ComPtr<IUIAutomationInvokePattern> invoke;
+        if (SUCCEEDED(item->GetCurrentPatternAs(UIA_InvokePatternId, __uuidof(IUIAutomationInvokePattern), reinterpret_cast<void**>(invoke.GetAddressOf()))) &&
+            invoke && SUCCEEDED(invoke->Invoke()))
+            picked = true;
+    }
+    if (expand) expand->Collapse();
+    Sleep(200);
+    if (!picked) {
+        *detail = L"\"" + element_name(combo.Get()) + L"\" has no item " + (wanted[0].empty() ? wanted[1] : wanted[0]) + L" (" +
+                  std::to_wstring(count_of(items.Get())) + L" items)";
+        return false;
+    }
+    if (!is_wanted(combo_value(combo.Get()))) {
+        *detail = L"selected, but \"" + element_name(combo.Get()) + L"\" still shows " + combo_value(combo.Get());
+        return false;
+    }
+    return true;
+}
+
+// Selects the configure preset in Visual Studio: first a command (a solution's
+// "Build.SolutionConfigurations", or a preset command if the version has one), then the toolbar
+// drop-down through UI Automation. Nothing is waited for. Returns a warning for the result text
+// when VS did not switch, empty on success.
 std::wstring select_preset(const Context& ctx, Disp& dte, std::map<std::wstring, std::vector<std::wstring>>& cache) {
     const VsJob& job = ctx.job;
     ctx.progress(fmt(loc(L"Selecting preset {} in Visual Studio…", L"Visual Studio'da {} preset'i seçiliyor…"), job.preset));
@@ -893,10 +1094,16 @@ std::wstring select_preset(const Context& ctx, Disp& dte, std::map<std::wstring,
             }
         }
     }
-    log_line(L"[vs] #" + std::to_wstring(ctx.job_id) + L" preset not selected; tried: " + tried + (last_error.empty() ? L"" : L"; " + last_error));
-    return fmt(loc(L"⚠ Visual Studio did not switch to preset {}; it used the preset selected in VS (commands: {}).",
-                   L"⚠ Visual Studio {} preset'ine geçmedi; VS'te seçili preset kullanıldı (komutlar: {})."),
-               job.preset, tried);
+    std::wstring detail;
+    if (select_preset_ui(dte, job, &detail)) {
+        log_line(L"[vs] #" + std::to_wstring(ctx.job_id) + L" preset selected via toolbar: " + job.preset);
+        return {};
+    }
+    log_line(L"[vs] #" + std::to_wstring(ctx.job_id) + L" preset not selected; tried: " + tried + (last_error.empty() ? L"" : L"; " + last_error) +
+             L"; toolbar: " + detail);
+    return fmt(loc(L"⚠ Visual Studio did not switch to preset {}; it used the preset selected in VS (toolbar: {}).",
+                   L"⚠ Visual Studio {} preset'ine geçmedi; VS'te seçili preset kullanıldı (araç çubuğu: {})."),
+               job.preset, detail);
 }
 
 // Lists the Output panes in the log once per session: which pane a build writes to differs
@@ -906,7 +1113,7 @@ void log_output_panes(Disp& dte) {
     if (done) return;
     done = true;
     try {
-        Disp panes = dte.get(L"ToolWindows").get(L"OutputWindow").get(L"OutputWindowPanes");
+        Disp panes = output_panes(dte);
         const long n = panes.get_long(L"Count");
         for (long i = 1; i <= n; ++i) {
             Disp pane = panes.item(i);

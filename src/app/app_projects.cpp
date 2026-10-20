@@ -613,6 +613,10 @@ void App::submit_vs(VsJob::Kind kind, const Item& repo) {
     if (!v.preset_guessed && v.active()) {
         job.preset = v.preset_name();
         job.preset_display = widen(v.active()->display_name);
+        for (const auto& p : v.presets) {
+            job.preset_names.push_back(widen(p.name));
+            if (!p.display_name.empty()) job.preset_names.push_back(widen(p.display_name));
+        }
     }
     Job entry;
     entry.kind = kind;

@@ -35,6 +35,7 @@ struct VsJob {
     // Configure preset chosen in Kamil: Visual Studio is switched to it before the job (empty:
     // keep whatever VS has selected). The drop-down shows the display name when there is one.
     std::wstring preset, preset_display;
+    std::vector<std::wstring> preset_names;  // every preset's name and display name: finds the drop-down
     uint32_t wait_ms = 90'000; // longest wait for VS to start or to enable a command
 
     // Debug
