@@ -1,6 +1,7 @@
 #include "platform/vs_bridge.h"
 
 #include <objbase.h>  // after vs_bridge.h, which brings windows.h
+#include <tlhelp32.h>
 #include <uiautomation.h>
 
 #include <algorithm>
@@ -115,6 +116,38 @@ bool process_elevated(DWORD pid) {
     }
     CloseHandle(h);
     return elevated;
+}
+
+// A build tool under Visual Studio that is still running: compiler, linker or build driver whose
+// parent chain reaches devenv. A CMake build can be quiet for a long time (AUTOMOC, linking, a
+// regenerate step) and can even report its build state as done in between, so the build only
+// counts as finished once none of these is left. Empty when none runs.
+std::wstring running_build_tool(DWORD devenv_pid) {
+    if (!devenv_pid) return {};
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return {};
+    std::map<DWORD, DWORD> parent;
+    std::vector<std::pair<DWORD, std::wstring>> tools;
+    PROCESSENTRY32W e{};
+    e.dwSize = sizeof(e);
+    for (BOOL ok = Process32FirstW(snap, &e); ok; ok = Process32NextW(snap, &e)) {
+        parent[e.th32ProcessID] = e.th32ParentProcessID;
+        const std::wstring name = lower(e.szExeFile);
+        for (const wchar_t* tool : {L"ninja.exe", L"cmake.exe", L"msbuild.exe", L"cl.exe", L"link.exe", L"lib.exe", L"rc.exe", L"mt.exe",
+                                    L"clang-cl.exe", L"lld-link.exe", L"moc.exe", L"uic.exe", L"rcc.exe"})
+            if (name == tool) tools.emplace_back(e.th32ProcessID, name);
+    }
+    CloseHandle(snap);
+    for (const auto& [pid, name] : tools) {
+        DWORD p = pid;
+        for (int depth = 0; depth < 24; ++depth) {
+            const auto it = parent.find(p);
+            if (it == parent.end() || it->second == p) break;
+            p = it->second;
+            if (p == devenv_pid) return name;
+        }
+    }
+    return {};
 }
 
 bool self_elevated() {
@@ -575,20 +608,6 @@ std::wstring pane_text_from(Disp& pane, long offset) {
     }
 }
 
-std::wstring pane_tail(Disp& pane, long chars) {
-    if (!pane.valid()) return {};
-    try {
-        Disp doc = pane.get(L"TextDocument");
-        Disp from = doc.get(L"EndPoint").get(L"CreateEditPoint");
-        const Variant count = Variant::i4(chars);
-        from.invoke(L"CharLeft", {&count}, DISPATCH_METHOD);
-        const Variant end = as_variant(doc.get(L"EndPoint"));
-        return from.invoke(L"GetText", {&end}, DISPATCH_METHOD).as_string();
-    } catch (const ComError&) {
-        return {};
-    }
-}
-
 std::vector<std::wstring> build_commands(VsJob::Kind kind) {
     // Open Folder (CMake) has the *All commands; solutions have the *Solution ones.
     switch (kind) {
@@ -599,8 +618,8 @@ std::vector<std::wstring> build_commands(VsJob::Kind kind) {
 }
 
 // Starts a build command and waits for it to finish. Primary signal: SolutionBuild.BuildState
-// (in progress -> done). Fallback for project systems that do not report it: the Build pane
-// text stops changing for a few seconds.
+// (in progress -> done) or the end-of-build line; fallback for project systems that report
+// neither: the Build pane text stops changing. Either way only once no build tool runs under VS.
 void log_output_panes(Disp& dte);
 
 BuildSummary run_build(const Context& ctx, Disp& dte, VsJob::Kind kind, const std::wstring& verb) {
@@ -634,7 +653,13 @@ BuildSummary run_build(const Context& ctx, Disp& dte, VsJob::Kind kind, const st
     const ULONGLONG start = GetTickCount64();
     ctx.progress(fmt(loc(L"{} running…", L"{} sürüyor…"), verb));
 
-    bool saw_progress = false, saw_output = false;
+    DWORD pid = 0;
+    try {
+        GetWindowThreadProcessId(reinterpret_cast<HWND>(static_cast<intptr_t>(dte.get(L"MainWindow").get_long(L"HWnd"))), &pid);
+    } catch (const ComError&) {
+    }
+    bool saw_progress = false, saw_output = false, end_line = false;
+    std::wstring waited_for;  // build tool that kept the build going after VS looked done
     long last_len = pane_length(pane);
     ULONGLONG last_change = GetTickCount64();
     for (;;) {
@@ -649,7 +674,6 @@ BuildSummary run_build(const Context& ctx, Disp& dte, VsJob::Kind kind, const st
         Sleep(300);
         const long state = build_state(dte);
         if (state == kInProgress) saw_progress = true;
-        if (saw_progress && state == kDone) break;
         if (!pane.valid()) {
             try {
                 pane = find_build_pane(dte);  // created by the first build of the session
@@ -664,18 +688,34 @@ BuildSummary run_build(const Context& ctx, Disp& dte, VsJob::Kind kind, const st
             last_change = now;
             saw_output = true;
             stream();
-            if (!saw_progress) {
-                // The end-of-build line: "Build All succeeded." (CMake), "========== Build: 1 succeeded" (MSBuild).
-                const std::wstring tail = pane_tail(pane, 300);
-                bool done = false;
-                for (const wchar_t* end : {L"All succeeded", L"All failed", L"Build succeeded", L"Build failed", L"========== Build:",
-                                           L"========== Rebuild", L"========== Clean"})
-                    done |= tail.find(end) != std::wstring::npos;
-                if (done) break;
+            // The end-of-build line at the start of one of this build's last lines: "Build All
+            // succeeded." (CMake), "========== Build: 1 succeeded" (MSBuild).
+            end_line = false;
+            std::wistringstream lines(log.substr(log.size() > 300 ? log.size() - 300 : 0));
+            for (std::wstring l; std::getline(lines, l) && !end_line;) {
+                const std::wstring_view t = trim(std::wstring_view(l));
+                for (const wchar_t* end : {L"Build All succeeded", L"Build All failed", L"Rebuild All succeeded", L"Rebuild All failed",
+                                           L"Clean All succeeded", L"Clean All failed", L"Build succeeded", L"Build failed",
+                                           L"Rebuild succeeded", L"Rebuild failed", L"========== Build:", L"========== Rebuild",
+                                           L"========== Clean"})
+                    end_line |= t.starts_with(end);
             }
         }
-        // Project systems that never report BuildState: treat 15 s without new output as done.
-        if (!saw_progress && saw_output && now - start > 5000 && now - last_change > 15000) break;
+        // Done when VS says so (build state, end line, or for project systems that never report a
+        // build state: 15 s without new output), but only once no build tool runs under VS.
+        const wchar_t* reason = saw_progress && state == kDone ? L"build state done"
+                                : end_line                     ? L"end line in the Build pane"
+                                : !saw_progress && saw_output && now - start > 5000 && now - last_change > 15000 ? L"15 s without output"
+                                                                                                              : nullptr;
+        if (reason) {
+            const std::wstring tool = running_build_tool(pid);
+            if (tool.empty()) {
+                log_line(L"[vs] #" + std::to_wstring(ctx.job_id) + L" build end: " + reason +
+                         (waited_for.empty() ? std::wstring() : L" (waited for " + waited_for + L")"));
+                break;
+            }
+            waited_for = tool;
+        }
         if (!saw_progress && !saw_output && now - start > 20000) {
             if (pane.valid())
                 throw ComError{E_FAIL, fmt(loc(L"Visual Studio accepted {} but no build started (no build state change, no output in the Build pane).",
