@@ -457,6 +457,10 @@ void App::open_file(const Item& item, LaunchMode mode) {
         return;
     }
     const std::wstring ext = lower_ext(item.path);
+    if ((ext == L".sln" || ext == L".slnx") && mode == LaunchMode::Normal) {
+        open_solution(item.path);  // the Visual Studio that already has it open, if any
+        return;
+    }
     const bool script = is_script_extension(ext);
     if (script) {
         const bool edit_first = store_.current()->get_string(keys::kScriptAction) == "edit" && ext != L".exe" && ext != L".lnk";
@@ -488,6 +492,7 @@ std::vector<Item> App::file_actions(const Item& item) const {
         if (!tools_.code.empty()) list.push_back(make_action(L"dir-code", loc(L"Open in VS Code", L"VS Code'da aç"), tools_.code, 0));
         const std::wstring& devenv = tools_.devenv(vs_choice());
         if (!devenv.empty()) list.push_back(make_action(L"dir-vs", loc(L"Open in Visual Studio (Open Folder)", L"Visual Studio'da aç (Open Folder)"), devenv, 0));
+        add_solution_actions(item.path, list);
         list.push_back(make_action(L"file-terminal", loc(L"Open in terminal", L"Terminalde aç"), {}, kGlyphTerminal, item.path));
         list.push_back(make_action(L"file-copy", loc(L"Copy path", L"Yolu kopyala"), {}, kGlyphCopy, item.path));
         return list;
@@ -543,6 +548,33 @@ bool App::run_file_action(const Item& item, const std::wstring& action) {
     else if (action == L"dir-vs") run_action(as_dir_item(dir), L"vs");
     else return false;
     return true;
+}
+
+// Solutions in the folder itself (not below it): Open Folder / CMake is the usual way, a
+// solution is offered next to it for the projects that also have one.
+void App::add_solution_actions(const std::wstring& dir, std::vector<Item>& list) const {
+    std::vector<std::wstring> solutions;
+    std::error_code ec;
+    for (std::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
+        const std::wstring ext = lower_ext(it->path().wstring());
+        if ((ext == L".sln" || ext == L".slnx") && it->is_regular_file(ec)) solutions.push_back(it->path().wstring());
+    }
+    std::sort(solutions.begin(), solutions.end());
+    const std::wstring& devenv = tools_.devenv(vs_choice());
+    for (const auto& sln : solutions)
+        list.push_back(make_action(L"vs-sln:" + sln,
+                                   fmt(loc(L"Open {} in Visual Studio", L"{} — Visual Studio'da aç"), std::filesystem::path(sln).filename().wstring()),
+                                   devenv.empty() ? sln : devenv, 0, loc(L"Solution; already open: brought to the front", L"Solution; zaten açıksa öne getirilir")));
+}
+
+void App::open_solution(const std::wstring& sln) {
+    launcher_.hide();
+    AllowSetForegroundWindow(ASFW_ANY);  // Visual Studio activates its own window
+    VsJob job;
+    job.kind = VsJob::Kind::OpenSolution;
+    job.file = sln;
+    job.dte_version = vs_choice() == "vs2022" ? L"17.0" : L"18.0";
+    pending_solution_[vs_->submit(std::move(job))] = sln;
 }
 
 // ---------------------------------------------------------------------------------------------

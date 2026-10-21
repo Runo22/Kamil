@@ -26,7 +26,7 @@
 namespace kamil {
 
 struct VsJob {
-    enum class Kind { Build, Rebuild, Clean, Configure, Reconfigure, Debug, Diagnose, GoTo };
+    enum class Kind { Build, Rebuild, Clean, Configure, Reconfigure, Debug, Diagnose, GoTo, OpenSolution };
     Kind kind = Kind::Build;
     std::wstring folder;       // project root (Open Folder)
     std::wstring devenv;       // devenv.exe of the wanted version
@@ -45,7 +45,8 @@ struct VsJob {
     // Command names for Configure / Reconfigure; empty: discover from the DTE command table.
     std::wstring configure_command, reconfigure_command;
 
-    // GoTo: open a file at a line in the instance that has `folder` open (never opens a new one)
+    // GoTo: open a file at a line in the instance that has `folder` open (never opens a new one).
+    // OpenSolution: bring the instance that has the .sln `file` open to the front (ok = false: none has).
     std::wstring file;
     int line = 0;
 

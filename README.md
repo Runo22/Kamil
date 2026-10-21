@@ -154,6 +154,9 @@ Git Bash, Git GUI, yolu / dal adını kopyala. Listede yazarak süzebilirsin; `T
   Visual Studio'nun yapılandırma listesinde de **o preset'i seçer**; böylece VS doğru preset'i derler. VS geçmezse
   sonuç bildiriminde "⚠ … preset'ine geçmedi" yazar. Seçim yapmazsan Kamil VS'te seçili (en son configure edilen)
   preset'i kullanır.
+- **Solution (.sln / .slnx):** klasörün kendisinde solution varsa *Open in Visual Studio*'nun hemen altında
+  "*X.sln — Visual Studio'da aç*" çıkar (her solution için bir satır). O solution zaten bir VS'te açıksa yeni VS
+  açılmaz, o pencere öne gelir. Configure / Build / Debug her zaman Open Folder (CMake) üzerinden çalışır.
 - **COM port:** bağlı seri portlar dostu adlarıyla listelenir; port numarası değişse de cihaz VID/PID ile hatırlanır.
 - **Argümanlar:** proje başına şablon, ör. `--port {com} --baud 115200`. Yer tutucular: `{com}` `{preset}`
   `{target}` `{config}` `{project}`. Boşsa `dev.default_args` kullanılır.
@@ -252,8 +255,9 @@ search:
 | `.ps1` | PowerShell (`-ExecutionPolicy Bypass`) ile çalıştırır | düzenle | çalıştır | 〃 |
 | `.py` / `.pyw` | `py` / `pyw` (veya `scripts.python`) ile çalıştırır | düzenle | çalıştır | 〃 |
 | `.sh` | Git for Windows `bash` ile çalıştırır | düzenle | çalıştır | 〃 |
+| `.sln` / `.slnx` | Visual Studio'da açar; zaten açıksa o pencereyi öne getirir | düzenle | — | birlikte aç…, konum, yolu kopyala |
 | diğer dosyalar | varsayılan uygulamayla açar | düzenle | — | birlikte aç…, konum, yolu kopyala |
-| klasörler | Gezgin'de açar | — | — | VS Code, Visual Studio (Open Folder), terminal |
+| klasörler | Gezgin'de açar | — | — | VS Code, Visual Studio (Open Folder), klasördeki .sln'ler, terminal |
 
 - `scripts.default_action: edit` → `Enter` düzenler, `Alt+R` çalıştırır.
 - `scripts.editor`: `auto` (VS Code varsa o), `code`, `notepad`, `default`.

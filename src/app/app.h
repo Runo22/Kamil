@@ -150,6 +150,8 @@ private:
     HWND running_window(const Item& item) const;
     bool bring_running(const Item& item);                 // false: not running
     bool run_file_action(const Item& item, const std::wstring& action);
+    void add_solution_actions(const std::wstring& dir, std::vector<Item>& list) const;  // "Open X.sln in VS"
+    void open_solution(const std::wstring& sln);  // brings the VS that has it open, else starts devenv
 
     // Projects (app_projects.cpp)
     const ProjectView& project_view(const std::wstring& root, bool fresh = false);
@@ -257,6 +259,7 @@ private:
     std::unordered_map<uint64_t, ConsoleRun> console_runs_;  // by tab id
     std::unordered_map<uint64_t, uint64_t> job_tabs_;        // VS job id -> tab id
     std::unordered_map<uint64_t, std::pair<std::wstring, int>> pending_goto_;  // GoTo job -> file, line
+    std::unordered_map<uint64_t, std::wstring> pending_solution_;             // OpenSolution job -> .sln
     std::thread warm_;  // pre-reads CMake presets and File API replies so Ctrl+K opens instantly
     std::atomic<bool> warm_cancel_{false};
 

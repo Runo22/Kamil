@@ -29,6 +29,7 @@ const wchar_t* vs_job_verb(VsJob::Kind kind) {
         case VsJob::Kind::Debug: return L"Debug";
         case VsJob::Kind::Diagnose: return L"Diagnose";
         case VsJob::Kind::GoTo: return L"Go to";
+        case VsJob::Kind::OpenSolution: return L"Open";
     }
     return L"";
 }
@@ -908,6 +909,19 @@ void goto_location(const Context& ctx, VsEvent& result) {
     result.ok = true;
 }
 
+// Brings the instance (either version) that has the solution job.file open to the front. Never
+// starts Visual Studio: without such an instance the caller starts devenv with the solution.
+void open_solution(const Context& ctx, VsEvent& result) {
+    const std::wstring sln = normalize(ctx.job.file);
+    for (auto& inst : all_instances(ctx.job.dte_version)) {
+        if (normalize(inst.solution) != sln) continue;
+        activate(inst.dte);
+        log_line(L"[vs] " + ctx.job.file + L" is already open in pid " + std::to_wstring(inst.pid));
+        result.ok = true;
+        return;
+    }
+}
+
 // Command object by name, or invalid when Visual Studio has no such command.
 Disp command_object(Disp& dte, const std::wstring& name) {
     try {
@@ -1209,7 +1223,7 @@ uint64_t VsBridge::submit(VsJob job) {
     {
         std::lock_guard lock(mutex_);
         id = next_id_++;
-        if (job.kind == VsJob::Kind::Diagnose || job.kind == VsJob::Kind::GoTo) {
+        if (job.kind == VsJob::Kind::Diagnose || job.kind == VsJob::Kind::GoTo || job.kind == VsJob::Kind::OpenSolution) {
             // Own thread: these must also work while a build runs or a job waits for VS.
             const HWND target = target_;
             side_threads_.emplace_back([target, id, job = std::move(job)] {
@@ -1222,6 +1236,7 @@ uint64_t VsBridge::submit(VsJob job) {
                 result->kind = job.kind;
                 try {
                     if (job.kind == VsJob::Kind::GoTo) goto_location(ctx, *result);
+                    else if (job.kind == VsJob::Kind::OpenSolution) open_solution(ctx, *result);
                     else diagnose(ctx, *result);
                 } catch (const ComError& e) {
                     result->text = e.what;

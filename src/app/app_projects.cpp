@@ -646,6 +646,19 @@ void App::on_vs_event(const VsEvent& e) {
         if (!e.ok) open_in_code(file, line);  // no Visual Studio has the project open
         return;
     }
+    if (e.kind == VsJob::Kind::OpenSolution) {
+        auto it = pending_solution_.find(e.job);
+        if (it == pending_solution_.end()) return;
+        const std::wstring sln = it->second;
+        pending_solution_.erase(it);
+        if (e.ok) return;  // already open: brought to the front
+        const std::wstring& devenv = tools_.devenv(vs_choice());
+        const std::wstring dir = std::filesystem::path(sln).parent_path().wstring();
+        const std::wstring title = std::filesystem::path(sln).filename().wstring();
+        if (devenv.empty()) run_detached(sln, {}, dir, false, title);  // the .sln file association
+        else run_detached(devenv, quote_arg(sln), dir, false, title);
+        return;
+    }
     on_vs_job_console(e);
     if (e.type == VsEvent::Type::Output) return;
     if (e.kind == VsJob::Kind::Diagnose) {

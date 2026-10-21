@@ -612,6 +612,7 @@ std::vector<Item> App::actions_for(const Item& item) const {
             if (!other_vs.empty() && other_vs != devenv)
                 list.push_back(make_action(L"vs-other", fmt(loc(L"Open in {}", L"{}'da aç"), vs_title(other_vs == tools_.devenv_2022 ? "vs2022" : "vs2026")),
                                            other_vs, 0, L"Open Folder (CMake)"));
+            add_solution_actions(item.path, list);
             if (!tools_.code.empty()) list.push_back(make_action(L"code", loc(L"Open in VS Code", L"VS Code'da aç"), tools_.code, 0));
             list.push_back(make_action(L"explorer", loc(L"Open in Explorer", L"Gezgin'de aç"), tools_.explorer, 0));
             const std::string term = store_.current()->get_string(keys::kTerminal);
@@ -635,16 +636,17 @@ std::vector<Item> App::actions_for(const Item& item) const {
             for (auto& a : list)
                 if (a.target != def) sorted.push_back(std::move(a));
             if (project) {
-                // Jobs to cancel, Configure, Build, Debug, Run, then the editors (VS / VS Code), then the rest.
+                // Jobs to cancel, Configure, Build, Debug, Run, then the editors (VS, solutions, VS Code), then the rest.
+                auto editor = [](const Item& a) { return a.target == L"vs" || a.target == L"code" || a.target.rfind(L"vs-sln:", 0) == 0; };
                 size_t head = 0;
                 while (head < project_list.size() && project_list[head].target.rfind(L"cancel-job:", 0) == 0) ++head;
                 head = std::min(project_list.size(), head + 4);  // Configure, Build, Debug, Run
                 for (size_t i = 0; i < head; ++i) actions.push_back(std::move(project_list[i]));
                 for (auto& a : sorted)
-                    if (a.target == L"vs" || a.target == L"code") actions.push_back(a);
+                    if (editor(a)) actions.push_back(a);
                 for (size_t i = head; i < project_list.size(); ++i) actions.push_back(std::move(project_list[i]));
                 for (auto& a : sorted)
-                    if (a.target != L"vs" && a.target != L"code") actions.push_back(std::move(a));
+                    if (!editor(a)) actions.push_back(std::move(a));
             } else {
                 for (auto& a : sorted) actions.push_back(std::move(a));
             }
@@ -693,6 +695,10 @@ void App::run_action(const Item& parent, const std::wstring& action) {
     if (parent.kind == ItemKind::Command) {
         launcher_.hide();
         run_command(parent.target);
+        return;
+    }
+    if (action.rfind(L"vs-sln:", 0) == 0) {
+        open_solution(action.substr(7));
         return;
     }
     if (run_file_action(parent, action)) return;
