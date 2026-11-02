@@ -131,8 +131,14 @@ Tools discover_tools(const std::wstring& devenv_override) {
                              env(L"LOCALAPPDATA") + L"\\Programs\\Microsoft VS Code\\Code.exe",
                              env(L"ProgramFiles") + L"\\Microsoft VS Code\\Code.exe"});
 
-    t.wt = search_path(L"wt.exe");
-    if (t.wt.empty()) t.wt = first_existing({env(L"LOCALAPPDATA") + L"\\Microsoft\\WindowsApps\\wt.exe"});
+    // Windows Terminal: the Store alias, or an unpackaged install (wt.exe next to WindowsTerminal.exe).
+    // Another wt.exe on PATH (a renamed copy of cmd, a script wrapper) does not understand -d.
+    t.wt = first_existing({env(L"LOCALAPPDATA") + L"\\Microsoft\\WindowsApps\\wt.exe"});
+    if (const std::wstring found = search_path(L"wt.exe"); t.wt.empty() && !found.empty()) {
+        if (exists(parent(found) + L"\\WindowsTerminal.exe")) t.wt = found;
+        else t.report += L"wt.exe on PATH is not Windows Terminal, ignored: " + found + L"\n";
+    }
+    t.report += L"Windows Terminal: " + (t.wt.empty() ? std::wstring(L"not found (terminal: cmd)") : t.wt) + L"\n";
 
     t.git = search_path(L"git.exe");
     std::wstring git_root;

@@ -775,8 +775,15 @@ void App::run_action(const Item& parent, const std::wstring& action) {
     launcher_.hide();
     const HWND target = hwnd_;
     const std::wstring title = parent.title;
-    executor_->post([exe, args, dir, title, target] {
-        const std::wstring err = run_program(exe, args, dir);
+    log_line(L"[app] " + action + L": " + exe + L" " + args + L"  (in " + dir + L")");
+    // A terminal that fails to start falls back to cmd in the same folder.
+    const std::wstring fallback = action == L"terminal" && exe != tools_.cmd ? tools_.cmd : std::wstring();
+    executor_->post([exe, args, dir, title, target, fallback] {
+        std::wstring err = run_program(exe, args, dir);
+        if (!err.empty() && !fallback.empty()) {
+            log_line(L"[app] terminal failed (" + err + L"), using cmd");
+            err = run_program(fallback, L"/K", dir);
+        }
         if (!err.empty())
             post_owned(target, WM_KAMIL_NOTIFY, new Notification{Notification::Level::Error, fmt(loc(L"{} could not be opened", L"{} açılamadı"), title), err});
     });
