@@ -16,6 +16,8 @@ Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 [Kamil Console](#kamil-console) ·
 [Dosyalar ve script'ler](#dosyalar-ve-scriptler) ·
 [Yer imleri](#yer-imleri-searchbookmarks) ·
+[Klasörde gezinme](#klasörde-gezinme-) ·
+[Dosyayı satırında aç](#dosyayı-satırında-aç-maincpp120) ·
 [Dahili komutlar](#dahili-komutlar) ·
 [Ayarlar](#ayarlar) ·
 [Sorun giderme](#sorun-giderme) ·
@@ -69,6 +71,7 @@ Yazmaya başla: sonuçlar her tuşta güncellenir. Boş pencerede en sık / son 
 | `↑` `↓`, `Ctrl+J`, fare tekerleği | Sonuçlarda gezin |
 | `PgUp` `PgDn`, `Ctrl+Home` `Ctrl+End` | Sayfa sayfa / en başa / en sona |
 | `Tab` | Seçili öğenin adını arama kutusuna yaz (tamamla) |
+| `\` (metnin sonunda) | Seçili klasörün **içine gir**: içindekiler listelenir (bkz. [Klasörde gezinme](#klasörde-gezinme-)) |
 | `Ctrl+K` veya metnin sonunda `→` | **Eylem paneli**: seçili öğe için yapılabilecek her şey |
 | `Esc` veya boş filtrede `←` | Eylem panelinden geri dön; ana listede pencereyi kapat |
 | `Ctrl+C` | Metin seçili değilse seçili öğenin yolunu kopyala |
@@ -99,6 +102,47 @@ dilde de bulunur (`settings` = `ayarlar`, `jobs` = `iptal`).
 Kamil seçimlerinden öğrenir: bir yazışta sık seçtiğin sonuç o yazışta en üste çıkar (`search.learning`; veriler sadece
 bu bilgisayarda, `usage.tsv`). Sıfırlamak için *Kamil: Forget what was learned*. Takma ad tanımlayabilirsin:
 `search.aliases` (ör. `code` → *Visual Studio Code*).
+
+### Klasörde gezinme (`\`)
+
+Seçili sonuç bir klasörse (yer imi, proje, bilinen klasör, aranan klasör) `\` tuşu arama metnini o klasörün yoluyla
+değiştirir ve **içindekileri listeler**; gizli olanlar (`.conan`, `.vscode` …) dahil. Önce klasörler, sonra dosyalar.
+
+- `\` yazdıktan sonra yazdıkların listeyi süzer (`C:\Users\tuna\.conan\da`); seçili alt klasörde `\` bir alta iner.
+- `Backspace` ile `\` silinince bir üst klasöre dönülür.
+- Boşken ilk satır klasörün kendisidir: `Enter` onu Gezgin'de açar. Diğer satırlar normal sonuçlar gibi çalışır
+  (`Enter`, `Alt+E`, `Ctrl+K` …); `Tab` tam yolu yazar.
+- Yolu doğrudan da yazabilir ya da yapıştırabilirsin: `C:\`, `D:\src\`, `~\.conan\`, `%APPDATA%\Code\`,
+  `\\sunucu\paylasim\`. `C:`, `~` veya `%APPDATA%` yazarken basılan `\` yolun parçasıdır, klasöre girmez.
+- Liste arka planda okunur; yavaş bir ağ klasörü pencereyi dondurmaz.
+
+### Dosyayı satırında aç (`main.cpp:120`)
+
+Aramaya bir dosya **konumu** yazar ya da yapıştırırsan sonuçlar o dosyalardır ve `Enter` dosyayı **o satırda** açar:
+
+| Yazılan / yapıştırılan | Örnek |
+|---|---|
+| `dosya:satır[:sütun]` (GCC, Clang, grep) | `main.cpp:120`, `src/core/search.cpp:42:9` |
+| `dosya(satır[,sütun])` (MSVC) | `main.cpp(120)`, `C:\src\app\main.cpp(12,5)` |
+| Derleyici mesajının tamamı | `C:\src\a.cpp(12): error C2065: 'x': undeclared identifier` |
+| Python traceback satırı | `File "C:\tools\flash.py", line 33, in main` |
+
+- Mutlak yol varsa o dosya; göreli yol veya sadece ad varsa son kullanılan projede, projelerde ve aranan klasörlerde
+  bu adla bulunan dosyalar. Klasörleri yazılan yola en çok uyan en üstte: başka bir makinenin (ör. CI günlüğündeki
+  `D:\a\_work\1\s\src\core\search.cpp(42)`) yolu yerel kopyayı bulur.
+- Dosya bir CMake projesindeyse o projeyi açık tutan Visual Studio'da, değilse VS Code'da (`code -g`) açılır.
+- Dosyanın bir uzantısı ya da klasörü olmalı; `Kamil: 2` veya `10:30` gibi yazımlar normal arama olarak kalır.
+
+### Kopyalanan yol
+
+Bir yol ya da dosya:satır konumu kopyaladıktan sonraki **2 dakika** içinde Kamil açılırsa o, listenin ilk satırı
+olarak gelir (alt satırda *Kopyalandı*): `Enter` klasörü açar, dosyayı açar ya da konumu o satırda açar.
+
+- Tanınanlar: `C:\x\y`, Gezgin'in *Yol olarak kopyala*'sı (`"C:\x y\z.txt"`), `file:///C:/...`, `%USERPROFILE%\...`,
+  `~\...`, `\\sunucu\paylasim\...`, derleyici hataları, Python traceback'leri (ilk 20 satırdaki ilk yol).
+- Bir kez açılan öneri tekrar gösterilmez. Var olmayan yollar önerilmez; ağ yolları denetlenmeden önerilir.
+- Pano yalnızca pencere açılırken ve yeni bir şey kopyalandıysa okunur; parola yöneticilerinin "izlenmesin" diye
+  işaretlediği içerik okunmaz. Kapatmak için: `search.clipboard_suggestion: false`.
 
 ### Açık programı getir
 
@@ -342,6 +386,7 @@ search:
   aliases:
     - alias: code
       target: Visual Studio Code
+  clipboard_suggestion: true  # kopyalanan yol / konum ilk sonuç olur
   bookmarks:                # yukarıda (Yer imleri)
     - { name: Conan cache, path: '~\.conan', keyword: conan }
 dev:
@@ -366,7 +411,7 @@ commands: [...]             # yukarıda
 | VS'e gönderilen komut olmuyor | *Kamil: VS jobs* işin neyi beklediğini gösterir; takılan işi oradan iptal et. *Kamil: Test VS connection* raporu ve `kamil.log` ayrıntıyı verir. |
 | "Visual Studio … yönetici olarak çalışıyor" | Normal çalışan Kamil, yönetici olarak açılmış VS'i yönetemez (Windows kısıtı). VS'i normal aç ya da Kamil'i de yönetici olarak çalıştır. |
 | "Visual Studio bulunamadı" / *Open in Visual Studio* uyarı veriyor | `dev.devenv_path` ile `devenv.exe` yolunu ver. |
-| Dosya / script aramada çıkmıyor | Klasörü `search.folders`'a ekle; `exclude_dirs` ve `depth` ayarlarına bak; indeks `max_files`'ta kesildiyse *Diagnostics* söyler. Adı `.` ile başlayan (gizli) klasörler hiç taranmaz: onları `search.bookmarks` ile ekle. |
+| Dosya / script aramada çıkmıyor | Klasörü `search.folders`'a ekle; `exclude_dirs` ve `depth` ayarlarına bak; indeks `max_files`'ta kesildiyse *Diagnostics* söyler. Adı `.` ile başlayan (gizli) klasörler hiç taranmaz: onları `search.bookmarks` ile ekle ya da klasörde `\` ile gez. |
 | Program çıktısı geç geliyor / Türkçe karakterler bozuk | Python'a `PYTHONUNBUFFERED` verilir; diğer programlar çıktıyı kendileri tamponluyor olabilir. Kodlama UTF-8 veya OEM olarak otomatik seçilir. |
 | Kamil kapandı | Bir sonraki açılışta balon çıkar; döküm (`crash-*.dmp`) önbellek klasöründedir. *Diagnostics* raporuyla birlikte gönder. |
 

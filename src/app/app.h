@@ -4,6 +4,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <thread>
 #include <string>
 #include <unordered_map>
@@ -129,7 +130,8 @@ private:
     void on_console_output(const ConsoleOutput& out);
     void on_vs_job_console(const VsEvent& e);
     void open_location(const ConsoleTab& tab, const std::wstring& file, int line);
-    void open_in_code(const std::wstring& file, int line);
+    void open_in_code(const std::wstring& file, int line, int column = 0);
+    void goto_in_vs(const std::wstring& root, const std::wstring& file, int line);
 
     // Diagnostics (app_diagnostics.cpp)
     void report_crashes();
@@ -146,6 +148,18 @@ private:
     std::vector<Item> file_actions(const Item& item) const;
     void add_known_folder_items(std::vector<Item>& items) const;
     void add_bookmark_items(std::vector<Item>& items) const;
+
+    // Paths typed or pasted into the search (app_files.cpp): browsing a folder, file:line locations,
+    // the copied path as first result.
+    std::wstring home_dir() const;
+    bool may_block(const std::wstring& path) const;  // network path: not touched on the UI thread
+    bool browse_query(const std::wstring& query, std::vector<Hit>& hits);
+    bool location_query(const std::wstring& query, std::vector<Hit>& hits);
+    void add_clipboard_hit(std::vector<Hit>& hits);
+    std::optional<std::wstring> step_into(const Item& item, const std::wstring& query) const;
+    void start_listing(const std::wstring& dir);
+    void on_dir_listed(std::unique_ptr<DirListing> listing);
+    void open_at_line(const std::wstring& file, int line, int column);
     void check_bookmarks(bool notify_missing);  // logs (and reports) bookmarks whose path does not exist
 
     // Running programs (apps.bring_running)
@@ -247,6 +261,15 @@ private:
     bool crashed_last_time_ = false;
     std::vector<UserCommand> user_commands_;
     std::vector<Bookmark> bookmarks_;  // search.bookmarks
+    struct Listed {
+        std::shared_ptr<const DirListing> listing;
+        ULONGLONG at = 0;  // GetTickCount64() when it was listed
+    };
+    std::vector<Listed> browse_cache_;          // folders listed last ("C:\x\" typed), newest first
+    std::wstring browse_pending_;               // folded folder being listed in the background
+    ULONGLONG clip_changed_at_ = 0;             // last WM_CLIPBOARDUPDATE
+    bool clip_dirty_ = false, clip_used_ = false;
+    std::optional<Item> clip_item_;             // the copied path as a result
     std::wstring last_project_;  // CMake project acted on last: target of action commands
 
     // Hotkeys with the Windows key go through a keyboard hook (Windows reserves many of them).

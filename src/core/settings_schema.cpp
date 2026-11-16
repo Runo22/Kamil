@@ -183,6 +183,11 @@ Schema build() {
                                                              "Aramaya tam olarak yazılınca bu yer imini en üste getirir, ör. 'conan'"}));
         s.add(std::move(d));
     }
+    s.add(def(keys::kClipboardSuggestion, Kind::Bool, true, {"Suggest the copied path", "Kopyalanan yolu öner"},
+              {"A path or file:line location copied in the last 2 minutes is the first result when Kamil opens (Enter opens "
+               "it; locations open at the line)",
+               "Son 2 dakikada kopyalanan bir yol ya da dosya:satır konumu, Kamil açılınca ilk sonuç olur (Enter açar; konumlar "
+               "o satırda açılır)"}));
     {
         auto d = def(keys::kLearningHalfLife, Kind::Duration, Value(int64_t{14} * 86'400'000), {"Learning half-life", "Öğrenme yarı ömrü"},
                      {"Time after which a choice counts half as much", "Bir seçimin etkisinin yarıya inme süresi"});

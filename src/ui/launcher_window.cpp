@@ -493,6 +493,17 @@ void LauncherWindow::complete() {
 void LauncherWindow::on_char(wchar_t ch) {
     if (ch < 0x20 || ch == 0x7F) return;  // control characters are handled in on_key
     if (key_down(VK_CONTROL) && !key_down(VK_MENU)) return;  // Ctrl+letter shortcuts (AltGr = Ctrl+Alt is text)
+    // '\' at the end of the search steps into the selected folder (its contents are listed).
+    if (ch == L'\\' && mode_ == Mode::Results && cb_.step_into && selected_ < hits_.size() && !edit_.has_selection() &&
+        edit_.caret() == edit_.text().size()) {
+        if (auto text = cb_.step_into(*hits_[selected_].item, edit_.text())) {
+            if (*text != edit_.text()) {
+                edit_.set_text(std::move(*text));
+                text_changed();
+            }
+            return;
+        }
+    }
     if (edit_.insert(std::wstring_view(&ch, 1))) text_changed();
 }
 

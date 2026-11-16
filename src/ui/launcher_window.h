@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -60,6 +61,9 @@ public:
         // Keys of the user's commands (kMod* + virtual key), checked before Kamil's own keys.
         // `selected` is the selected result (nullptr if none). Returns true if a command ran.
         std::function<bool(uint32_t mods, uint32_t vk, const Item* selected)> command_hotkey;
+        // '\' typed at the end of the search: the new search text to step into the selected folder
+        // (unchanged: swallow the key), or nullopt to type the '\'.
+        std::function<std::optional<std::wstring>(const Item& selected, const std::wstring& query)> step_into;
     };
 
     bool create(HINSTANCE instance, Callbacks callbacks);

@@ -27,6 +27,8 @@ struct Item {
     std::wstring keywords;    // extra searchable text (e.g. a command's title in the other UI language)
     std::wstring icon_key;    // icon cache key when icons are shared (e.g. one per file extension); empty: key
     wchar_t glyph = 0;        // Segoe MDL2 Assets glyph drawn when there is no icon source
+    int line = 0;             // File: > 0 opens the file at this line (a "file:line" search or clipboard location)
+    int column = 0;
     ItemKind kind = ItemKind::App;
 
     // Derived search data, filled by prepare().

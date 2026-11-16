@@ -165,12 +165,42 @@ void App::on_vs_job_console(const VsEvent& e) {
     }
 }
 
-void App::open_in_code(const std::wstring& file, int line) {
+void App::open_in_code(const std::wstring& file, int line, int column) {
     const std::wstring code = tools_.code;
-    executor_->post([code, file, line] {
-        if (!code.empty()) run_program(code, L"-g " + quote_arg(file + L":" + std::to_wstring(std::max(1, line))));
+    std::wstring where = file + L":" + std::to_wstring(std::max(1, line));
+    if (column > 0) where += L":" + std::to_wstring(column);
+    executor_->post([code, file, where] {
+        if (!code.empty()) run_program(code, L"-g " + quote_arg(where));
         else open_in_editor(file);
     });
+}
+
+void App::goto_in_vs(const std::wstring& root, const std::wstring& file, int line) {
+    VsJob job;
+    job.kind = VsJob::Kind::GoTo;
+    job.folder = root;
+    job.dte_version = vs_choice() == "vs2022" ? L"17.0" : L"18.0";
+    job.file = file;
+    job.line = line;
+    const uint64_t id = vs_->submit(std::move(job));
+    pending_goto_[id] = {file, line};  // no Visual Studio has it open: VS Code
+}
+
+void App::open_at_line(const std::wstring& file, int line, int column) {
+    // In a CMake project: the Visual Studio that has it open; otherwise (or if none has it) VS Code.
+    const std::wstring f = normalize_folder(file);
+    const RepoInfo* best = nullptr;
+    for (const auto& r : repos_) {
+        const std::wstring root = normalize_folder(r.path);
+        if (f.size() > root.size() && f.compare(0, root.size(), root) == 0 && f[root.size()] == L'\\' &&
+            (!best || r.path.size() > best->path.size()))
+            best = &r;
+    }
+    if (best && is_project(best->path)) {
+        goto_in_vs(best->path, file, line);
+        return;
+    }
+    open_in_code(file, line, column);
 }
 
 void App::open_location(const ConsoleTab& tab, const std::wstring& file, int line) {
@@ -181,14 +211,7 @@ void App::open_location(const ConsoleTab& tab, const std::wstring& file, int lin
     }
     // Project output: the Visual Studio that has the project open; otherwise (or if none has it) VS Code.
     if (!tab.root.empty() && is_project(tab.root)) {
-        VsJob job;
-        job.kind = VsJob::Kind::GoTo;
-        job.folder = tab.root;
-        job.dte_version = vs_choice() == "vs2022" ? L"17.0" : L"18.0";
-        job.file = file;
-        job.line = line;
-        const uint64_t id = vs_->submit(std::move(job));
-        pending_goto_[id] = {file, line};
+        goto_in_vs(tab.root, file, line);
         return;
     }
     open_in_code(file, line);

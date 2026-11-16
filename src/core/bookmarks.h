@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+#include "core/path_input.h"
 #include "core/settings.h"
 
 namespace kamil {
@@ -19,19 +20,9 @@ struct Bookmark {
     std::wstring keyword_folded;  // typed exactly, puts the bookmark first; empty: none
 };
 
-// Expands %ENVIRONMENT_VARIABLES% in a path (ExpandEnvironmentStrings on Windows).
-using EnvExpander = std::function<std::wstring(const std::wstring&)>;
-
 // Cleans up a bookmark path: trims spaces and surrounding quotes, expands a leading '~' to `home`,
 // then %VARS% with `expand`, turns '/' into '\\' and drops trailing separators ("C:\\" stays).
 std::wstring normalize_bookmark_path(std::wstring_view raw, const std::wstring& home, const EnvExpander& expand);
-
-// The last part of a path: "C:\\Users\\me\\.conan" -> ".conan", "C:\\" -> "C:".
-std::wstring last_path_part(std::wstring_view path);
-
-// True for "\\\\server\\share\\..." paths: they are not touched on the UI thread (an unreachable
-// server blocks for seconds).
-bool is_unc_path(std::wstring_view path);
 
 // Reads the search.bookmarks objects. Entries without a usable path, and a second bookmark of the
 // same path (case insensitive), are skipped.

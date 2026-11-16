@@ -152,6 +152,7 @@ int App::run(HINSTANCE instance, bool autostart) {
     cb.footer = [this](const Item* selected, const Item* parent) { return footer_for(selected, parent); };
     cb.quick_action = [this](const Item& item, wchar_t key) { return quick_action(item, key); };
     cb.command_hotkey = [this](uint32_t mods, uint32_t vk, const Item* selected) { return run_command_hotkey(mods, vk, selected); };
+    cb.step_into = [this](const Item& item, const std::wstring& query) { return step_into(item, query); };
     if (!launcher_.create(instance_, std::move(cb))) {
         MessageBoxW(nullptr, loc(L"The search window could not be created (Direct2D/DirectComposition).",
                                  L"Arama penceresi oluşturulamadı (Direct2D/DirectComposition)."),
@@ -215,6 +216,7 @@ bool App::create_window() {
     // A hidden top-level window (not message-only) so that it receives TaskbarCreated and
     // WM_SETTINGCHANGE broadcasts.
     hwnd_ = CreateWindowExW(0, kAppWindowClass, L"Kamil", WS_OVERLAPPED, 0, 0, 0, 0, nullptr, nullptr, instance_, this);
+    if (hwnd_) AddClipboardFormatListener(hwnd_);  // WM_CLIPBOARDUPDATE: when a path was copied
     return hwnd_ != nullptr;
 }
 
@@ -457,8 +459,13 @@ void App::run_query(const std::wstring& query) {
     LARGE_INTEGER t0, t1, freq;
     QueryPerformanceCounter(&t0);
     search_options_.now_unix = now_unix();
-    std::vector<Hit> hits = search(items_, query, usage_, search_options_);
-    add_file_hits(query, hits);
+    std::vector<Hit> hits;
+    // "main.cpp:120" opens a file at a line; "C:\x\" lists a folder; otherwise the normal search.
+    if (!location_query(query, hits) && !browse_query(query, hits)) {
+        hits = search(items_, query, usage_, search_options_);
+        add_file_hits(query, hits);
+        if (trim(std::wstring_view(query)).empty()) add_clipboard_hit(hits);
+    }
     QueryPerformanceCounter(&t1);
     QueryPerformanceFrequency(&freq);
     if (!query.empty()) record_query_time(static_cast<double>(t1.QuadPart - t0.QuadPart) * 1000.0 / static_cast<double>(freq.QuadPart));
@@ -484,6 +491,12 @@ void App::on_activate(const Item& item, LaunchMode mode) {
         }
         launcher_.hide();
         run_command(item.target);
+        return;
+    }
+    if (clip_item_ && item.key == clip_item_->key) clip_used_ = true;  // suggested once is enough
+    if (item.kind == ItemKind::File && item.line > 0 && mode == LaunchMode::Normal) {
+        launcher_.hide();
+        open_at_line(item.path, item.line, item.column);
         return;
     }
     if (item.kind == ItemKind::Repo) {
@@ -869,6 +882,10 @@ Footer App::footer_for(const Item* selected, const Item* parent) {
             break;
         case ItemKind::File: {
             f.left = with_job(selected->subtitle);
+            if (selected->line > 0) {
+                f.hints = {{L"Enter", fmt(loc(L"Open at line {}", L"{}. satırda aç"), std::to_wstring(selected->line)), Do::Activate}, more};
+                break;
+            }
             std::wstring ext = std::filesystem::path(selected->path).extension().wstring();
             for (auto& c : ext) c = static_cast<wchar_t>(towlower(c));
             if (!is_script_extension(ext))
@@ -1101,7 +1118,15 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_ENDSESSION:
             if (wp && usage_.dirty()) usage_.save(paths_.usage_file());
             return 0;
+        case WM_CLIPBOARDUPDATE:
+            clip_changed_at_ = GetTickCount64();  // read only when the window opens
+            clip_dirty_ = true;
+            return 0;
+        case WM_KAMIL_DIR_LISTED:
+            on_dir_listed(std::unique_ptr<DirListing>(reinterpret_cast<DirListing*>(lp)));
+            return 0;
         case WM_DESTROY:
+            RemoveClipboardFormatListener(hwnd_);
             PostQuitMessage(0);
             return 0;
         default:

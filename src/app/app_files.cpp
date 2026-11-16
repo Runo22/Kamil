@@ -306,6 +306,235 @@ void App::check_bookmarks(bool notify_missing) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Paths typed or pasted into the search
+
+std::wstring App::home_dir() const {
+    static const std::wstring home = expand_env(L"%USERPROFILE%");
+    return home;
+}
+
+bool App::may_block(const std::wstring& path) const {
+    if (is_unc_path(path)) return true;
+    if (path.size() < 2 || path[1] != L':') return false;
+    const wchar_t root[] = {path[0], L':', L'\\', 0};
+    return GetDriveTypeW(root) == DRIVE_REMOTE;  // a mapped network drive
+}
+
+namespace {
+
+std::wstring without_trailing_separator(std::wstring p) {
+    while (p.size() > 3 && (p.back() == L'\\' || p.back() == L'/')) p.pop_back();
+    return p;
+}
+
+std::wstring with_trailing_separator(std::wstring p) {
+    p = without_trailing_separator(std::move(p));
+    if (!p.empty() && p.back() != L'\\') p.push_back(L'\\');
+    return p;
+}
+
+}  // namespace
+
+std::optional<std::wstring> App::step_into(const Item& item, const std::wstring& query) const {
+    if (item.kind != ItemKind::Folder && item.kind != ItemKind::Repo) return std::nullopt;
+    return step_into_query(item.path, query, home_dir(), expand_env);
+}
+
+void App::start_listing(const std::wstring& dir) {
+    browse_pending_ = fold(dir);
+    const HWND target = hwnd_;
+    // Its own thread: a slow or unreachable network folder must not hold up the executor or the UI.
+    std::thread([dir, target] { post_owned(target, WM_KAMIL_DIR_LISTED, new DirListing(list_directory(dir))); }).detach();
+}
+
+void App::on_dir_listed(std::unique_ptr<DirListing> listing) {
+    if (fold(listing->dir) != browse_pending_) return;  // the search moved on to another folder
+    browse_pending_.clear();
+    if (!listing->ok) log_line(L"[browse] cannot list " + listing->dir);
+    // A few folders are kept: going back up (Backspace) shows the parent at once.
+    const std::wstring key = fold(listing->dir);
+    std::erase_if(browse_cache_, [&](const Listed& l) { return fold(l.listing->dir) == key; });
+    browse_cache_.insert(browse_cache_.begin(), Listed{std::shared_ptr<const DirListing>(std::move(listing)), GetTickCount64()});
+    if (browse_cache_.size() > 8) browse_cache_.resize(8);
+    if (launcher_.visible() && !launcher_.in_action_panel()) run_query(launcher_.query());
+}
+
+bool App::browse_query(const std::wstring& query, std::vector<Hit>& hits) {
+    const auto pq = parse_path_query(query, home_dir(), expand_env);
+    if (!pq) return false;
+    const std::wstring key = fold(pq->dir);
+    const Listed* cached = nullptr;
+    for (const auto& l : browse_cache_)
+        if (fold(l.listing->dir) == key) cached = &l;
+    const bool have = cached != nullptr;
+    // Listed before the window was last closed: list again (the old list shows meanwhile).
+    const bool stale = have && cached->at < launcher_.hidden_at();
+    if ((!have || stale) && browse_pending_ != key) start_listing(pq->dir);
+    const DirListing* listing = have ? cached->listing.get() : nullptr;
+
+    const bool remote = may_block(pq->dir);
+    const size_t cap = std::max<size_t>(search_options_.limit, 300);
+    query_items_.clear();
+    query_items_.reserve(cap + 1);  // hits point into query_items_: it must never reallocate
+    const std::wstring folder = without_trailing_separator(pq->dir);
+
+    // Nothing typed after the separator: the folder itself comes first, so Enter opens it.
+    if (pq->filter.empty() && (!listing || listing->ok)) {
+        Item self = make_file_item(folder, true, !remote);
+        const std::wstring part = last_path_part(folder);
+        self.title = part.empty() ? folder : part;
+        self.subtitle = loc(L"This folder", L"Bu klasör") + std::wstring(L"   ") + folder;
+        self.completion = query;  // Tab: nothing to complete
+        self.prepare();
+        query_items_.push_back(std::move(self));
+        hits.push_back(Hit{&query_items_.back(), 1'000'000, {}});
+    }
+    if (!listing) return true;  // the listing arrives in a moment
+
+    const FuzzyMatcher matcher(pq->filter);
+    size_t probed = 0;
+    for (const auto& m : rank_dir_entries(*listing, pq->filter, cap)) {
+        const DirEntry& e = listing->entries[m.index];
+        const std::wstring path = pq->dir + e.name;
+        // Only the first rows are checked for CMakeLists.txt (one file system call each).
+        const bool probe = e.is_dir && !remote && probed++ < 40;
+        Item it = make_file_item(path, e.is_dir, probe);
+        it.completion = path;
+        it.prepare();
+        query_items_.push_back(std::move(it));
+        Hit hit{&query_items_.back(), m.score, {}};
+        if (!matcher.empty()) matcher.match(hit.item->title, hit.item->title_folded, &hit.positions);
+        hits.push_back(std::move(hit));
+    }
+    return true;
+}
+
+bool App::location_query(const std::wstring& query, std::vector<Hit>& hits) {
+    const auto fl = parse_file_location(query);
+    if (!fl) return false;
+    const std::wstring written = expand_user_path(fl->file, home_dir(), expand_env);
+    const std::wstring name = last_path_part(written);
+    std::wstring suffix = L":" + std::to_wstring(fl->line);
+    if (fl->column > 0) suffix += L":" + std::to_wstring(fl->column);
+
+    const size_t cap = search_options_.limit;
+    query_items_.clear();
+    query_items_.reserve(cap);  // hits point into query_items_: it must never reallocate
+    const FuzzyMatcher name_matcher(name);
+    auto add = [&](const std::wstring& path, int score) {
+        const std::wstring key = L"file:" + path;
+        for (auto& h : hits)
+            if (h.item->key == key) {
+                h.score = std::max(h.score, score);
+                return;
+            }
+        if (query_items_.size() >= cap) return;
+        Item it = make_file_item(path, false);
+        it.title += suffix;
+        it.line = fl->line;
+        it.column = fl->column;
+        it.completion = path + suffix;
+        it.prepare();
+        query_items_.push_back(std::move(it));
+        Hit hit{&query_items_.back(), score, {}};
+        name_matcher.match(hit.item->title, hit.item->title_folded, &hit.positions);
+        hits.push_back(std::move(hit));
+    };
+    auto is_file = [&](const std::wstring& p) {
+        std::error_code ec;
+        return std::filesystem::is_regular_file(p, ec);
+    };
+
+    if (is_absolute_path(written)) {
+        if (may_block(written) || is_file(written)) add(written, 1'000'000);  // network paths: not checked
+    } else {
+        // Relative ("src\core\a.cpp", "a.cpp"): under the project used last, then under every project.
+        std::vector<std::wstring> roots;
+        if (!last_project_.empty()) roots.push_back(last_project_);
+        for (const auto& r : repos_) roots.push_back(r.path);
+        for (const auto& root : roots) {
+            if (may_block(root)) continue;
+            const std::wstring p = with_trailing_separator(root) + written;
+            if (is_file(p)) add(p, 500'000 + 1000 * location_match(p, written) + (root == last_project_ ? 100 : 0));
+        }
+    }
+    // The file index: files with this name, the ones whose folders match the written path first
+    // (a path from a CI log or another machine still finds the local copy).
+    if (file_index_ && !name_matcher.empty()) {
+        for (const auto& m : file_index_->search(name_matcher, cap * 4)) {
+            if (file_index_->is_dir(m.entry)) continue;
+            const std::wstring path = file_index_->path(m.entry);
+            const int fit = location_match(path, written);
+            if (fit > 0) add(path, 1000 * fit + m.score);
+        }
+    }
+    std::sort(hits.begin(), hits.end(), hit_better);
+    return true;
+}
+
+namespace {
+
+// The clipboard text when it may be a path: nothing from password managers, nothing large.
+std::wstring clipboard_text_for_suggestion(HWND owner) {
+    static const UINT exclude = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
+    if (exclude && IsClipboardFormatAvailable(exclude)) return {};
+    std::wstring out;
+    if (!IsClipboardFormatAvailable(CF_UNICODETEXT) || !OpenClipboard(owner)) return out;
+    if (HANDLE h = GetClipboardData(CF_UNICODETEXT)) {
+        if (GlobalSize(h) <= 16384 * sizeof(wchar_t)) {
+            if (const auto* p = static_cast<const wchar_t*>(GlobalLock(h))) {
+                out = p;
+                GlobalUnlock(h);
+            }
+        }
+    }
+    CloseClipboard();
+    return out;
+}
+
+}  // namespace
+
+void App::add_clipboard_hit(std::vector<Hit>& hits) {
+    constexpr ULONGLONG kFreshMs = 120'000;  // suggested for 2 minutes after the copy
+    if (!store_.current()->get_bool(keys::kClipboardSuggestion) || clip_changed_at_ == 0) return;
+    if (GetTickCount64() - clip_changed_at_ > kFreshMs) return;
+    if (clip_dirty_) {
+        clip_dirty_ = false;
+        clip_used_ = false;
+        clip_item_.reset();
+        if (auto c = parse_clipboard_path(clipboard_text_for_suggestion(hwnd_), home_dir(), expand_env)) {
+            const bool remote = may_block(c->path);
+            bool is_dir = false;
+            bool exists = true;
+            if (remote) {
+                is_dir = c->line == 0 && std::filesystem::path(c->path).extension().empty();
+            } else {
+                std::error_code ec;
+                const auto status = std::filesystem::status(c->path, ec);
+                exists = !ec && std::filesystem::exists(status);
+                is_dir = exists && std::filesystem::is_directory(status);
+            }
+            if (exists) {
+                Item it = make_file_item(c->path, is_dir, !remote);
+                if (!is_dir && c->line > 0) {
+                    it.line = c->line;
+                    it.column = c->column;
+                    it.title += L":" + std::to_wstring(c->line);
+                }
+                it.subtitle = loc(L"Copied", L"Kopyalandı") + std::wstring(L"   ") + c->path;
+                it.prepare();
+                clip_item_ = std::move(it);
+            }
+        }
+    }
+    if (!clip_item_ || clip_used_) return;
+    const std::wstring& key = clip_item_->key;
+    hits.erase(std::remove_if(hits.begin(), hits.end(), [&](const Hit& h) { return h.item->key == key; }), hits.end());
+    hits.insert(hits.begin(), Hit{&*clip_item_, 1'000'000, {}});
+    if (hits.size() > search_options_.limit) hits.resize(search_options_.limit);
+}
+
+// ---------------------------------------------------------------------------------------------
 // Search
 
 Item App::make_file_item(const std::wstring& path, bool is_dir, bool probe) const {

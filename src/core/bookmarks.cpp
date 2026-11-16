@@ -6,34 +6,13 @@
 
 namespace kamil {
 
-namespace {
-
-bool is_sep(wchar_t c) { return c == L'\\' || c == L'/'; }
-
-}  // namespace
-
 std::wstring normalize_bookmark_path(std::wstring_view raw, const std::wstring& home, const EnvExpander& expand) {
-    std::wstring_view v = trim(raw);
-    if (v.size() >= 2 && ((v.front() == L'"' && v.back() == L'"') || (v.front() == L'\'' && v.back() == L'\'')))
-        v = trim(v.substr(1, v.size() - 2));
-    std::wstring p(v);
-    if (!p.empty() && p[0] == L'~' && (p.size() == 1 || is_sep(p[1])) && !home.empty()) p = home + p.substr(1);
-    if (expand && p.find(L'%') != std::wstring::npos) p = expand(p);
-    for (auto& c : p)
-        if (c == L'/') c = L'\\';
+    std::wstring p = expand_user_path(raw, home, expand);
     // "C:\\" keeps its separator ("C:" alone means the current folder of drive C).
     while (p.size() > 1 && p.back() == L'\\' && !(p.size() == 3 && p[1] == L':')) p.pop_back();
     if (p == L"\\") p.clear();
     return p;
 }
-
-std::wstring last_path_part(std::wstring_view path) {
-    while (path.size() > 1 && is_sep(path.back())) path.remove_suffix(1);
-    const size_t pos = path.find_last_of(L"\\/");
-    return std::wstring(pos == std::wstring_view::npos ? path : path.substr(pos + 1));
-}
-
-bool is_unc_path(std::wstring_view path) { return path.size() >= 2 && is_sep(path[0]) && is_sep(path[1]); }
 
 std::vector<Bookmark> parse_bookmarks(const Value::Objects& objects, const std::wstring& home, const EnvExpander& expand) {
     std::vector<Bookmark> out;
