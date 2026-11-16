@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "app/paths.h"
+#include "core/bookmarks.h"
 #include "core/cmake.h"
 #include "core/file_index.h"
 #include "core/hotkey.h"
@@ -134,7 +135,8 @@ private:
     void report_crashes();
     void write_diagnostics();
     void record_query_time(double ms);
-    Item make_file_item(const std::wstring& path, bool is_dir) const;
+    // probe: look whether a folder is a CMake project (false for network paths: never touched on the UI thread).
+    Item make_file_item(const std::wstring& path, bool is_dir, bool probe = true) const;
     void add_file_hits(const std::wstring& query, std::vector<Hit>& hits);
     void run_detached(std::wstring exe, std::wstring args, std::wstring dir, bool admin, std::wstring title, const wchar_t* verb = nullptr);
     std::wstring python_for(bool windowed) const;
@@ -143,6 +145,8 @@ private:
     void open_file(const Item& item, LaunchMode mode);
     std::vector<Item> file_actions(const Item& item) const;
     void add_known_folder_items(std::vector<Item>& items) const;
+    void add_bookmark_items(std::vector<Item>& items) const;
+    void check_bookmarks(bool notify_missing);  // logs (and reports) bookmarks whose path does not exist
 
     // Running programs (apps.bring_running)
     std::wstring exe_of(const Item& item) const;          // the program an app / .exe / .lnk item starts
@@ -242,6 +246,7 @@ private:
     std::atomic<ULONGLONG> warm_ms_{0};  // written by the warm thread
     bool crashed_last_time_ = false;
     std::vector<UserCommand> user_commands_;
+    std::vector<Bookmark> bookmarks_;  // search.bookmarks
     std::wstring last_project_;  // CMake project acted on last: target of action commands
 
     // Hotkeys with the Windows key go through a keyboard hook (Windows reserves many of them).

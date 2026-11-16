@@ -251,6 +251,9 @@ Başlat Menüsü `.lnk`, Masaüstü, `PATH` exe'leri, UWP (`shell:AppsFolder`), 
 "Birlikte aç" kuralları uzantıya/klasör desenine göre (`*.py → code`, `CMakeLists.txt içeren klasör → vs2022`).
 
 ### 5.3 Sık kullanılanlar, LAN ve intranet
+> İlk adım yapıldı: `search.bookmarks` (ad, yol, keyword; gizli klasörler, dosyalar, script'ler). Kalanlar: URL ve
+> şablonlu bağlantılar, erişilebilirlik noktası, tarayıcı yer imleri.
+
 - Elle tanımlı klasör, UNC yol, intranet URL'leri; durum noktası (erişilebilir / değil).
 - Şablonlu bağlantılar: `bug 1234` → `http://tracker.lan/issue/1234`.
 - Chrome/Edge yerel `Bookmarks` dosyasından intranet yer imleri.

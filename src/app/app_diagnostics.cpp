@@ -1,6 +1,7 @@
 // "Kamil: Diagnostics" report, crash dump notice and search timing.
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -103,6 +104,13 @@ void App::write_diagnostics() {
         line(L"Last full scan", ms_text(static_cast<double>(files_scan_ms_)));
     } else {
         line(L"Indexed files and folders", L"none (no search.folders, or the first scan is running)");
+    }
+    for (const auto& b : bookmarks_) {
+        std::error_code ec;
+        const std::wstring state = is_unc_path(b.path) ? L"network path, not checked"
+                                   : std::filesystem::exists(b.path, ec) ? (std::filesystem::is_directory(b.path, ec) ? L"folder" : L"file")
+                                                                         : L"NOT FOUND, not listed";
+        line(L"Bookmark " + b.name, b.path + L"  (" + state + (b.keyword_folded.empty() ? L"" : L", keyword '" + b.keyword_folded + L"'") + L")");
     }
     if (!query_ms_.empty()) {
         std::vector<float> sorted = query_ms_;

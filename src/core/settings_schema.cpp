@@ -166,6 +166,24 @@ Schema build() {
                    "ProgramData, Başlat Menüsü, Başlangıç ... aramada kendi ikonlarıyla (%appdata%, %temp% ... diye de bulunur)"}));
     }
     {
+        auto d = def(keys::kBookmarks, Kind::ObjectList, Value::Objects{}, {"Bookmarks", "Yer imleri"},
+                     {"Folders, files and scripts under a name of your own, from anywhere, hidden folders included (the file search skips "
+                      "names starting with '.'). They work like any other folder / file / script result: Enter opens or runs, Ctrl+K "
+                      "lists the rest. Typing the 'keyword' exactly puts the bookmark first",
+                      "Kendi verdiğin adla klasörler, dosyalar ve script'ler; her yerden, gizli klasörler dahil (dosya araması '.' ile "
+                      "başlayan adlara girmez). Diğer klasör / dosya / script sonuçları gibi çalışır: Enter açar veya çalıştırır, Ctrl+K "
+                      "gerisini listeler. 'keyword' tam olarak yazılınca yer imi en üste gelir"});
+        d.fields.push_back(field("name", Kind::String, "", {"Shown in the search, e.g. 'Conan cache'; empty: the folder / file name",
+                                                          "Aramada görünen ad, ör. 'Conan önbelleği'; boş: klasör / dosya adı"}));
+        d.fields.push_back(field("path", Kind::Path, "",
+                                 {"'%USERPROFILE%\\.conan' or '~\\.conan' (%ENVIRONMENT_VARIABLES% and ~ allowed)",
+                                  "'%USERPROFILE%\\.conan' veya '~\\.conan' (%ORTAM_DEĞİŞKENİ% ve ~ kullanılabilir)"},
+                                 true));
+        d.fields.push_back(field("keyword", Kind::String, "", {"Typed exactly in the search, it puts this bookmark first, e.g. 'conan'",
+                                                             "Aramaya tam olarak yazılınca bu yer imini en üste getirir, ör. 'conan'"}));
+        s.add(std::move(d));
+    }
+    {
         auto d = def(keys::kLearningHalfLife, Kind::Duration, Value(int64_t{14} * 86'400'000), {"Learning half-life", "Öğrenme yarı ömrü"},
                      {"Time after which a choice counts half as much", "Bir seçimin etkisinin yarıya inme süresi"});
         d.min = 86'400'000;

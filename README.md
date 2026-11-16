@@ -15,6 +15,7 @@ Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 [Özel komutlar](#özel-komutlar) ·
 [Kamil Console](#kamil-console) ·
 [Dosyalar ve script'ler](#dosyalar-ve-scriptler) ·
+[Yer imleri](#yer-imleri-searchbookmarks) ·
 [Dahili komutlar](#dahili-komutlar) ·
 [Ayarlar](#ayarlar) ·
 [Sorun giderme](#sorun-giderme) ·
@@ -83,6 +84,8 @@ Fareyle de seçilebilir; başka bir yere tıklamak pencereyi kapatır (`general.
 - **Uygulamalar:** Başlat Menüsü ve Store uygulamaları, kendi ikonlarıyla.
 - **Projeler:** `dev.project_roots` altındaki git depoları ve CMake projeleri (dal adıyla).
 - **Dosyalar ve klasörler:** `search.folders` altındaki her şey (Everything gerekmez); yeni dosyalar anında görünür.
+- **Yer imleri:** `search.bookmarks` ile kendi adını verdiğin klasör, dosya ve script'ler; gizli klasörler dahil
+  (bkz. [Yer imleri](#yer-imleri-searchbookmarks)).
 - **Bilinen klasörler:** kullanıcı klasörün, Downloads, Desktop, Documents, Pictures, Music, Videos, AppData Roaming /
   Local / LocalLow, Temp, Program Files (x86), ProgramData, Başlat Menüsü, Startup, SendTo, Windows, OneDrive — Windows'un
   kendi ikonlarıyla. Türkçe adları ve `%appdata%`, `%localappdata%`, `%temp%` gibi yazımlarla da bulunur. `Enter`
@@ -263,6 +266,33 @@ search:
 - `scripts.editor`: `auto` (VS Code varsa o), `code`, `notepad`, `default`.
 - `scripts.keep_console_open: false` → script bitince konsol kapanır.
 
+### Yer imleri (`search.bookmarks`)
+
+Dosya araması adı `.` ile başlayan klasörlere girmez (`%USERPROFILE%\.conan`, `.vscode`, `.ssh` …) ve aynı adlı
+klasörleri ayırt etmez (Conan önbelleği mi, projedeki `conan` klasörü mü?). Yer imi bir klasöre, dosyaya ya da
+script'e **kendi verdiğin adı** verir; yol nerede olursa olsun aramada çıkar:
+
+```yaml
+search:
+  bookmarks:
+    - name: Conan cache
+      path: '%USERPROFILE%\.conan'    # veya '~\.conan'
+      keyword: conan                  # tam olarak "conan" yazınca en üstte
+    - name: Flash device
+      path: 'D:\tools\flash.py'        # script: Enter çalıştırır, Alt+E düzenler
+    - path: '~\.conan\profiles'        # ad yoksa klasörün adı: "profiles"
+```
+
+- Yer imi, gösterdiği klasör / dosya / script / CMake projesi gibi davranır: `Enter`, `Alt+E`, `Alt+R` ve `Ctrl+K`
+  eylemleri (VS Code, Visual Studio, terminal, yolu kopyala …) aynıdır.
+- `keyword` tam yazılınca yer imi en üste çıkar, aynı adlı diğer sonuçlar altında kalır. Yer imi kendi adıyla
+  (`cc` → *Conan cache*) ve dosya / klasör adıyla da (`.conan`, `flash.py`) bulunur.
+- Yer imli bir dosya `search.folders` altında da olsa listede bir kez, yer iminin adıyla görünür; seçimlerden öğrenme
+  ortaktır.
+- `path` içinde `%ORTAM_DEĞİŞKENİ%` ve baştaki `~` (kullanıcı klasörün) kullanılabilir.
+- Var olmayan yollar listelenmez; ayar kaydedilince balon hangilerinin bulunamadığını söyler, *Diagnostics* hepsini
+  durumlarıyla gösterir. Ağ yolları (`\\sunucu\paylasim`) yavaş olabileceği için denetlenmez, her zaman listelenir.
+
 ## Dahili komutlar
 
 Aramada yazarak bulunur (İngilizce veya Türkçe adıyla):
@@ -312,6 +342,8 @@ search:
   aliases:
     - alias: code
       target: Visual Studio Code
+  bookmarks:                # yukarıda (Yer imleri)
+    - { name: Conan cache, path: '~\.conan', keyword: conan }
 dev:
   default_vs: vs2026        # vs2026 | vs2022
   devenv_path: ''           # boş: otomatik (vswhere / standart klasörler)
@@ -334,7 +366,7 @@ commands: [...]             # yukarıda
 | VS'e gönderilen komut olmuyor | *Kamil: VS jobs* işin neyi beklediğini gösterir; takılan işi oradan iptal et. *Kamil: Test VS connection* raporu ve `kamil.log` ayrıntıyı verir. |
 | "Visual Studio … yönetici olarak çalışıyor" | Normal çalışan Kamil, yönetici olarak açılmış VS'i yönetemez (Windows kısıtı). VS'i normal aç ya da Kamil'i de yönetici olarak çalıştır. |
 | "Visual Studio bulunamadı" / *Open in Visual Studio* uyarı veriyor | `dev.devenv_path` ile `devenv.exe` yolunu ver. |
-| Dosya / script aramada çıkmıyor | Klasörü `search.folders`'a ekle; `exclude_dirs` ve `depth` ayarlarına bak; indeks `max_files`'ta kesildiyse *Diagnostics* söyler. |
+| Dosya / script aramada çıkmıyor | Klasörü `search.folders`'a ekle; `exclude_dirs` ve `depth` ayarlarına bak; indeks `max_files`'ta kesildiyse *Diagnostics* söyler. Adı `.` ile başlayan (gizli) klasörler hiç taranmaz: onları `search.bookmarks` ile ekle. |
 | Program çıktısı geç geliyor / Türkçe karakterler bozuk | Python'a `PYTHONUNBUFFERED` verilir; diğer programlar çıktıyı kendileri tamponluyor olabilir. Kodlama UTF-8 veya OEM olarak otomatik seçilir. |
 | Kamil kapandı | Bir sonraki açılışta balon çıkar; döküm (`crash-*.dmp`) önbellek klasöründedir. *Diagnostics* raporuyla birlikte gönder. |
 

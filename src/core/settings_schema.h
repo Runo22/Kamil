@@ -34,6 +34,7 @@ inline constexpr const char* kMaxFiles = "search.max_files";
 inline constexpr const char* kLearning = "search.learning";
 inline constexpr const char* kLearningHalfLife = "search.learning_half_life";
 inline constexpr const char* kKnownFolders = "search.known_folders";
+inline constexpr const char* kBookmarks = "search.bookmarks";
 
 inline constexpr const char* kScriptAction = "scripts.default_action";
 inline constexpr const char* kScriptEditor = "scripts.editor";

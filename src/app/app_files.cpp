@@ -262,10 +262,54 @@ void App::add_known_folder_items(std::vector<Item>& items) const {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Bookmarks (search.bookmarks): any folder / file / script under a name of its own
+
+void App::add_bookmark_items(std::vector<Item>& items) const {
+    for (const auto& b : bookmarks_) {
+        bool is_dir = false;
+        const bool unc = is_unc_path(b.path);
+        if (unc) {
+            // Not touched here: an unreachable server would block the UI. "name.ext" is taken for a file.
+            is_dir = std::filesystem::path(b.path).extension().empty();
+        } else {
+            std::error_code ec;
+            const auto status = std::filesystem::status(b.path, ec);
+            if (ec || !std::filesystem::exists(status)) continue;  // reported by check_bookmarks
+            is_dir = std::filesystem::is_directory(status);
+        }
+        // The same item a file search would give (same key, so the same actions and learned ranking),
+        // titled with the bookmark's own name.
+        Item it = make_file_item(b.path, is_dir, !unc);
+        it.title = b.name;
+        it.subtitle = it.kind == ItemKind::Repo ? L"CMake   " + b.path : b.path;
+        it.keywords = bookmark_keywords(b);
+        it.prepare();
+        items.push_back(std::move(it));
+    }
+}
+
+void App::check_bookmarks(bool notify_missing) {
+    std::wstring missing;
+    size_t count = 0;
+    for (const auto& b : bookmarks_) {
+        if (is_unc_path(b.path)) continue;
+        std::error_code ec;
+        if (std::filesystem::exists(b.path, ec)) continue;
+        log_line("[bookmarks] not found: " + narrow(b.name) + " -> " + narrow(b.path));
+        if (count++ < 3) missing += L"\n" + b.name + L":  " + b.path;
+    }
+    if (count > 3) missing += fmt(loc(L"\n(+{} more)", L"\n(+{} yer imi daha)"), std::to_wstring(count - 3));
+    if (notify_missing && count)
+        notify(loc(L"Bookmark not found", L"Yer imi bulunamadı"),
+               loc(L"search.bookmarks: these paths do not exist, they are not listed:", L"search.bookmarks: bu yollar yok, listelenmiyor:") + missing,
+               Tray::Balloon::Warning);
+}
+
+// ---------------------------------------------------------------------------------------------
 // Search
 
-Item App::make_file_item(const std::wstring& path, bool is_dir) const {
-    if (is_dir && is_cmake_dir(path)) {
+Item App::make_file_item(const std::wstring& path, bool is_dir, bool probe) const {
+    if (is_dir && probe && is_cmake_dir(path)) {
         // A CMake project found by the file search: the same item (and actions) as a scanned project.
         Item it;
         it.kind = ItemKind::Repo;
@@ -310,6 +354,7 @@ void App::add_file_hits(const std::wstring& query, std::vector<Hit>& hits) {
             std::error_code ec;
             const auto status = std::filesystem::status(path, ec);
             if (ec || !std::filesystem::exists(status)) continue;
+            if (std::any_of(hits.begin(), hits.end(), [&](const Hit& h) { return h.item->key == key; })) continue;  // a bookmark
             query_items_.push_back(make_file_item(path, std::filesystem::is_directory(status)));
             hits.push_back(Hit{&query_items_.back(), static_cast<int>(usage_.frecency(key, search_options_.now_unix) * 100), {}});
         }
@@ -333,7 +378,8 @@ void App::add_file_hits(const std::wstring& query, std::vector<Hit>& hits) {
                                     usage_.affinity(folded_query, item.key, search_options_.now_unix));
         Hit hit{&item, score, {}};
         matcher.match(item.title, item.title_folded, &hit.positions);
-        hits.push_back(std::move(hit));
+        // A bookmarked file is listed once, under the bookmark's name.
+        if (!add_unique_hit(hits, std::move(hit))) query_items_.pop_back();
     }
     std::sort(hits.begin(), hits.end(), hit_better);
     if (hits.size() > limit) hits.resize(limit);

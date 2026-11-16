@@ -50,6 +50,16 @@ int folder_bonus(std::wstring_view path, const std::vector<FolderBoost>& boosts)
     return bonus;
 }
 
+bool add_unique_hit(std::vector<Hit>& hits, Hit hit) {
+    for (auto& h : hits) {
+        if (h.item->key != hit.item->key) continue;
+        h.score = std::max(h.score, hit.score);
+        return false;
+    }
+    hits.push_back(std::move(hit));
+    return true;
+}
+
 std::vector<Hit> search(std::span<const Item> items, std::wstring_view query, const UsageStore& usage,
                         const SearchOptions& opt) {
     std::vector<Hit> hits;

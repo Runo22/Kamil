@@ -313,6 +313,10 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
     }
     for (const auto& c : user_commands_)  // a command's keyword works like an alias for its name
         if (!c.keyword.empty()) search_options_.aliases.push_back({fold(trim(std::wstring_view(c.keyword))), fold(c.name)});
+    bookmarks_ = parse_bookmarks(s.get_objects(keys::kBookmarks), expand_env(L"%USERPROFILE%"), expand_env);
+    for (const auto& b : bookmarks_)  // so does a bookmark's keyword
+        if (!b.keyword_folded.empty()) search_options_.aliases.push_back({b.keyword_folded, fold(b.name)});
+    if (initial || touched(keys::kBookmarks)) check_bookmarks(!initial);
     search_options_.folder_boosts.clear();
     for (const auto& obj : s.get_objects(keys::kFolderPriority)) {
         const Value* p = obj.find("path");
@@ -422,6 +426,7 @@ void App::rebuild_items() {
     }
     add_user_command_items(items);
     if (store_.current()->get_bool(keys::kKnownFolders)) add_known_folder_items(items);
+    add_bookmark_items(items);
     for (const auto& repo : repos_) {
         Item it;
         it.kind = ItemKind::Repo;

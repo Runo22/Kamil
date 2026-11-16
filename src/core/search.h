@@ -47,6 +47,11 @@ int learning_bonus(double frecency, double affinity);
 // Result order: score, then shorter title, then title.
 bool hit_better(const Hit& a, const Hit& b);
 
+// Adds `hit` unless an item with the same key is already listed. Then the listed hit stays (with its
+// title: a bookmark keeps its own name over the file index's file name) and takes the better score.
+// Returns whether `hit` was added.
+bool add_unique_hit(std::vector<Hit>& hits, Hit hit);
+
 // Ranks `items` for `query`. Score = fuzzy match + learned affinity + frecency (+ alias boost).
 // With an empty query it returns the most frequently/recently used items.
 std::vector<Hit> search(std::span<const Item> items, std::wstring_view query, const UsageStore& usage,
