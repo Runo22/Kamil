@@ -38,6 +38,19 @@ std::optional<std::filesystem::path> resolve_git_dir(const std::filesystem::path
 GitHead parse_head(std::string_view head_file_content);
 GitHead read_head(const std::filesystem::path& git_dir);
 
+// Branches of a repository, read from refs/ and packed-refs (no git.exe). A worktree's git dir
+// is followed to the common dir ("commondir" file). Local: "main", "feature/x"; remote:
+// "origin/main" (the remotes' HEAD symbolic refs are left out). Both sorted, no duplicates.
+struct GitBranches {
+    std::vector<std::string> local;
+    std::vector<std::string> remote;
+};
+GitBranches list_branches(const std::filesystem::path& git_dir);
+
+// Remote branches without a local branch of the same name ("origin/feature/y" when there is no
+// "feature/y"): `git switch feature/y` creates the local branch tracking it.
+std::vector<std::string> remote_only_branches(const GitBranches& b);
+
 // Parses `git status --porcelain=v1 -b` output.
 GitStatus parse_porcelain_v1(std::string_view output);
 

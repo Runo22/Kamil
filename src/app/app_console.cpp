@@ -70,11 +70,13 @@ void App::show_console(bool activate) {
 }
 
 uint64_t App::start_in_console(const std::wstring& title, const std::wstring& detail, const std::wstring& root, const std::wstring& exe,
-                               const std::wstring& args, const std::wstring& dir, std::function<void()> rerun, const std::wstring& notify_name) {
+                               const std::wstring& args, const std::wstring& dir, std::function<void()> rerun, const std::wstring& notify_name,
+                               std::function<void(bool ok)> on_done) {
     const uint64_t tab = console_.open_tab(title, detail, root, true, static_cast<bool>(rerun));
     ConsoleRun run;
     run.rerun = std::move(rerun);
     run.notify_name = notify_name;
+    run.on_done = std::move(on_done);
     run.proc = std::make_unique<ChildProcess>();
     console_.note(tab, L"▶ " + quote_arg(exe) + (args.empty() ? L"" : L" " + args) + L"    (" + dir + L")");
     std::wstring error;
@@ -113,6 +115,10 @@ void App::on_console_output(const ConsoleOutput& out) {
                         std::to_wstring(static_cast<long>(out.exit_code))),
                last + (last.empty() ? L"" : L"\n") + loc(L"Output: Kamil: Console", L"Çıktı: Kamil: Console"),
                ok ? Tray::Balloon::Info : Tray::Balloon::Error);
+    }
+    if (it->second.on_done) {
+        const auto done = it->second.on_done;  // may start another run (console_runs_ changes)
+        done(ok);
     }
 }
 

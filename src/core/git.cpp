@@ -1,6 +1,7 @@
 #include "core/git.h"
 
 #include <charconv>
+#include <set>
 #include <fstream>
 #include <sstream>
 #include <system_error>
@@ -73,6 +74,71 @@ GitHead parse_head(std::string_view content) {
 }
 
 GitHead read_head(const fs::path& git_dir) { return parse_head(read_small_file(git_dir / "HEAD", 512)); }
+
+GitBranches list_branches(const fs::path& git_dir) {
+    GitBranches out;
+    // A worktree keeps its own HEAD but shares the refs of the main repository.
+    fs::path common = git_dir;
+    if (const std::string c = std::string(trim(std::string_view(read_small_file(git_dir / "commondir", 1024)))); !c.empty()) {
+        std::string_view line = c;
+        if (const auto nl = line.find_first_of("\r\n"); nl != std::string_view::npos) line = trim(line.substr(0, nl));
+        fs::path dir = fs::path(widen(line));
+        common = (dir.is_relative() ? git_dir / dir : dir).lexically_normal();
+    }
+    std::set<std::string> local, remote;
+    auto add = [&](std::string_view ref) {
+        constexpr std::string_view kHeads = "refs/heads/", kRemotes = "refs/remotes/";
+        if (ref.substr(0, kHeads.size()) == kHeads) {
+            ref.remove_prefix(kHeads.size());
+            if (!ref.empty()) local.emplace(ref);
+        } else if (ref.substr(0, kRemotes.size()) == kRemotes) {
+            ref.remove_prefix(kRemotes.size());
+            const auto slash = ref.find('/');
+            if (slash == std::string_view::npos || slash + 1 >= ref.size() || ref.substr(slash + 1) == "HEAD") return;
+            remote.emplace(ref);
+        }
+    };
+    // Loose refs: one file per ref under refs/heads and refs/remotes.
+    for (const char* top : {"refs/heads", "refs/remotes"}) {
+        std::error_code ec;
+        const fs::path base = common / "refs";
+        fs::recursive_directory_iterator it(common / top, fs::directory_options::skip_permission_denied, ec);
+        if (ec) continue;
+        for (; it != fs::recursive_directory_iterator(); it.increment(ec)) {
+            if (ec) break;
+            std::error_code e2;
+            if (!it->is_regular_file(e2)) continue;
+            const std::string rel = narrow(it->path().lexically_relative(base).generic_wstring());
+            if (rel.size() > 5 && rel.compare(rel.size() - 5, 5, ".lock") == 0) continue;
+            add("refs/" + rel);
+        }
+    }
+    // packed-refs: "<sha> refs/heads/x" lines ('#' header, '^' peeled tags).
+    const std::string packed = read_small_file(common / "packed-refs", 16u << 20);
+    size_t start = 0;
+    while (start < packed.size()) {
+        size_t end = packed.find('\n', start);
+        if (end == std::string::npos) end = packed.size();
+        std::string_view line = trim(std::string_view(packed).substr(start, end - start));
+        start = end + 1;
+        if (line.empty() || line[0] == '#' || line[0] == '^') continue;
+        const auto sp = line.find(' ');
+        if (sp != std::string_view::npos) add(trim(line.substr(sp + 1)));
+    }
+    out.local.assign(local.begin(), local.end());
+    out.remote.assign(remote.begin(), remote.end());
+    return out;
+}
+
+std::vector<std::string> remote_only_branches(const GitBranches& b) {
+    std::vector<std::string> out;
+    std::set<std::string> seen(b.local.begin(), b.local.end());
+    for (const auto& r : b.remote) {
+        const std::string name = r.substr(r.find('/') + 1);
+        if (seen.insert(name).second) out.push_back(r);
+    }
+    return out;
+}
 
 GitStatus parse_porcelain_v1(std::string_view out) {
     GitStatus s;

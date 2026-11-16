@@ -211,6 +211,24 @@ Git Bash, Git GUI, yolu / dal adını kopyala. Listede yazarak süzebilirsin; `T
   `{target}` `{config}` `{project}`. Boşsa `dev.default_args` kullanılır.
 - Seçimler proje başına hatırlanır (`projects.tsv`).
 
+### Git eylemleri
+
+Git deposu olan her proje, depo ya da klasörün `Ctrl+K` listesinde (git.exe bulunduysa):
+
+| Eylem | Komut | Çıktı |
+|---|---|---|
+| Git durumu | `git status` | Kamil Console açılır; satırda dal, değişiklik sayısı, ↑ gönderilmemiş / ↓ alınmamış commit |
+| Git: dal değiştir… | `git switch <dal>` | Yerel dallar (şu anki ✓ en üstte) ve yerelde olmayan uzak dallar (`origin/x` → izleyen yerel `x` oluşur); sonuç bildirimle |
+| Git fetch | `git fetch --all --prune` | bildirim |
+| Git pull | `git pull --ff-only` | bildirim; dallar ayrıştıysa git birleştirmez, nedenini söyler |
+| Git push | `git push` | bildirim |
+| Git geçmişi | `git log --oneline --graph --decorate -30` | Kamil Console |
+
+- Dal listesi `.git` içinden okunur (git.exe beklenmez, worktree'ler dahil). Yeni uzak dallar için önce *Git fetch*.
+- Yerel değişiklikler üzerine yazılacaksa git dal değiştirmeyi reddeder; çıktı Kamil Console'dadır (*Run again* `F5`).
+- Komut bitince sonuçtaki `⎇ dal` ve alt bilgi çubuğu yenilenir. Çalışma alanlarındaki *dalı değiştir* de aynı yolu
+  kullanır.
+
 ### VS iş kuyruğu
 
 VS işleri sırayla çalışır; aynı iş ikinci kez sıraya alınmaz. Alt bilgi çalışan işi ve `+N sırada` sayısını gösterir.

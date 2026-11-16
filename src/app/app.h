@@ -128,7 +128,7 @@ private:
     // with `notify_name` the result is also reported as a notification.
     uint64_t start_in_console(const std::wstring& title, const std::wstring& detail, const std::wstring& root, const std::wstring& exe,
                               const std::wstring& args, const std::wstring& dir, std::function<void()> rerun,
-                              const std::wstring& notify_name = {});
+                              const std::wstring& notify_name = {}, std::function<void(bool ok)> on_done = {});
     void on_console_output(const ConsoleOutput& out);
     void on_vs_job_console(const VsEvent& e);
     void open_location(const ConsoleTab& tab, const std::wstring& file, int line);
@@ -179,6 +179,12 @@ private:
     std::vector<Item> workspace_actions(const Item& item) const;
     bool run_workspace_action(const Item& item, const std::wstring& action);
     void before_show();  // refreshes what may have changed while the window was closed
+
+    // Git actions in Ctrl+K of repositories and git folders (app_git.cpp)
+    void add_git_actions(const std::wstring& path, std::vector<Item>& list) const;
+    bool run_git_action(const Item& parent, const std::wstring& action);
+    void run_git(const std::wstring& repo, const std::wstring& args, bool show_output);
+    void after_git(const std::wstring& repo);  // the branch / status shown may have changed
     void check_bookmarks(bool notify_missing);  // logs (and reports) bookmarks whose path does not exist
 
     // Running programs (apps.bring_running)
@@ -307,6 +313,7 @@ private:
         std::function<void()> rerun;
         uint64_t vs_job = 0;                 // build tabs: the VS job behind it (Stop cancels it)
         std::wstring notify_name;
+        std::function<void(bool ok)> on_done;  // after the program exited
     };
     std::unordered_map<uint64_t, ConsoleRun> console_runs_;  // by tab id
     std::unordered_map<uint64_t, uint64_t> job_tabs_;        // VS job id -> tab id

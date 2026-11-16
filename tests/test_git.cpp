@@ -90,3 +90,41 @@ TEST(git_find_repos_and_worktree) {
     CHECK(!has(root / "plain" / "src"));
     fs::remove_all(root);
 }
+
+TEST(git_list_branches) {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "kamil_test_branches";
+    fs::remove_all(root);
+    const fs::path git = root / "repo" / ".git";
+    auto write = [](const fs::path& p, const std::string& text) {
+        fs::create_directories(p.parent_path());
+        std::ofstream(p, std::ios::binary) << text;
+    };
+    const std::string sha = "0123456789abcdef0123456789abcdef01234567\n";
+    write(git / "HEAD", "ref: refs/heads/main\n");
+    write(git / "refs" / "heads" / "main", sha);
+    write(git / "refs" / "heads" / "feature" / "com-port", sha);  // nested name
+    write(git / "refs" / "heads" / "wip.lock", sha);               // a lock file: not a branch
+    write(git / "refs" / "remotes" / "origin" / "HEAD", "ref: refs/remotes/origin/main\n");
+    write(git / "refs" / "remotes" / "origin" / "main", sha);
+    write(git / "refs" / "tags" / "v1.0", sha);
+    write(git / "packed-refs",
+          "# pack-refs with: peeled fully-peeled sorted\n" + sha.substr(0, 40) + " refs/heads/release/1.2\n" + sha.substr(0, 40) +
+              " refs/remotes/origin/develop\n" + sha.substr(0, 40) + " refs/remotes/origin/main\n" + sha.substr(0, 40) +
+              " refs/remotes/upstream/feature/com-port\n" + sha.substr(0, 40) + " refs/tags/v0.9\n^" + sha.substr(0, 40) + "\n");
+    GitBranches b = list_branches(git);
+    CHECK((b.local == std::vector<std::string>{"feature/com-port", "main", "release/1.2"}));
+    CHECK((b.remote == std::vector<std::string>{"origin/develop", "origin/main", "upstream/feature/com-port"}));
+    CHECK((remote_only_branches(b) == std::vector<std::string>{"origin/develop"}));
+
+    // A worktree: its own HEAD, the refs of the main repository through "commondir".
+    const fs::path wt = git / "worktrees" / "wt1";
+    write(wt / "HEAD", "ref: refs/heads/feature/com-port\n");
+    write(wt / "commondir", "../..\n");
+    GitBranches w = list_branches(wt);
+    CHECK(w.local == b.local);
+    CHECK(w.remote == b.remote);
+
+    CHECK(list_branches(root / "none").local.empty());
+    fs::remove_all(root);
+}

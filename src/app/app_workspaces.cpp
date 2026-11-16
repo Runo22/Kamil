@@ -290,12 +290,8 @@ bool App::run_workspace_action(const Item& item, const std::wstring& action) {
         const size_t i = std::wcstoul(action.c_str() + 10, nullptr, 10);
         if (i >= w->entries.size() || tools_.git.empty()) return true;
         const WorkspaceEntry e = w->entries[i];
-        launcher_.hide();
         // git refuses to switch when local changes would be overwritten; the output says why.
-        const std::wstring title = L"git switch " + e.branch + L" — " + e.label();
-        const std::wstring git = tools_.git;
-        const std::wstring args = L"switch " + quote_arg(e.branch);
-        start_in_console(title, e.path, e.path, git, args, e.path, {}, title);
+        run_git(e.path, L"switch " + quote_arg(e.branch), false);
         return true;
     }
     return true;

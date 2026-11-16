@@ -73,6 +73,7 @@ if(WIN32)
         src/app/main.cpp
         src/app/app.cpp
         src/app/app_files.cpp
+        src/app/app_git.cpp
         src/app/app_projects.cpp
         src/app/app_diagnostics.cpp
         src/app/app_commands.cpp

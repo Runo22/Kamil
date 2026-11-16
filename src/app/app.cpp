@@ -653,6 +653,7 @@ std::vector<Item> App::actions_for(const Item& item) const {
                                                                  : tools_.cmd;
             const wchar_t* term_name = use_wt ? L"Windows Terminal" : use_bash ? L"Git Bash" : term == "powershell" ? L"PowerShell" : loc(L"Command Prompt", L"Komut İstemi");
             list.push_back(make_action(L"terminal", loc(L"Open in terminal", L"Terminalde aç"), term_exe, kGlyphTerminal, term_name));
+            add_git_actions(item.path, list);
             if (!tools_.git_bash.empty()) list.push_back(make_action(L"git-bash", loc(L"Open in Git Bash", L"Git Bash'te aç"), tools_.git_bash, 0));
             if (!tools_.git_gui.empty()) list.push_back(make_action(L"git-gui", L"Git GUI", tools_.git_gui, 0));
             list.push_back(make_action(L"copy-path", loc(L"Copy path", L"Yolu kopyala"), {}, kGlyphCopy, item.path));
@@ -691,6 +692,7 @@ std::vector<Item> App::actions_for(const Item& item) const {
         case ItemKind::File:
         case ItemKind::Folder:
             actions = file_actions(item);
+            if (item.kind == ItemKind::Folder) add_git_actions(item.path, actions);
             break;
         default: {
             if (running_window(item)) {
@@ -720,6 +722,7 @@ void App::run_action(const Item& parent, const std::wstring& action) {
         schedule_usage_save();
     }
     if (run_job_action(parent, action)) return;
+    if (run_git_action(parent, action)) return;
     if (action == L"bring-running") {
         if (!bring_running(parent))
             notify(parent.title, loc(L"It is not running any more.", L"Artık çalışmıyor."), Tray::Balloon::Info);
