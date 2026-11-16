@@ -57,12 +57,15 @@ inline constexpr const char* kVsReconfigureCommand = "dev.vs_reconfigure_command
 inline constexpr const char* kVsWaitSeconds = "dev.vs_wait_seconds";
 inline constexpr const char* kRunIn = "dev.run_in";
 inline constexpr const char* kConsoleOnBuild = "dev.console_on_build";
+inline constexpr const char* kConan = "dev.conan";
+inline constexpr const char* kConanHome = "dev.conan_home";
 
 // Applications
 inline constexpr const char* kBringRunning = "apps.bring_running";
 
 // Custom commands (a top-level list)
 inline constexpr const char* kCommands = "commands";
+inline constexpr const char* kWorkspaces = "workspaces";
 }  // namespace keys
 
 }  // namespace kamil

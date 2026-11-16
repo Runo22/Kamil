@@ -39,6 +39,7 @@ endif()
 add_library(kamil_core STATIC
     src/core/bookmarks.cpp
     src/core/cmake.cpp
+    src/core/conan.cpp
     src/core/console_buffer.cpp
     src/core/file_index.cpp
     src/core/fuzzy.cpp
@@ -56,6 +57,7 @@ add_library(kamil_core STATIC
     src/core/settings_schema.cpp
     src/core/text.cpp
     src/core/usage.cpp
+    src/core/workspaces.cpp
 )
 target_include_directories(kamil_core PUBLIC src)
 find_package(Threads REQUIRED)
@@ -75,6 +77,7 @@ if(WIN32)
         src/app/app_diagnostics.cpp
         src/app/app_commands.cpp
         src/app/app_console.cpp
+        src/app/app_workspaces.cpp
         src/app/paths.cpp
         src/platform/child_process.cpp
         src/platform/com_ports.cpp
@@ -116,7 +119,7 @@ endif()
 
 if(KAMIL_BUILD_TESTS)
     enable_testing()
-    add_executable(kamil_tests tests/test_main.cpp tests/test_bookmarks.cpp tests/test_cmake.cpp tests/test_console.cpp tests/test_core.cpp tests/test_file_index.cpp tests/test_git.cpp tests/test_path_input.cpp tests/test_settings.cpp)
+    add_executable(kamil_tests tests/test_main.cpp tests/test_bookmarks.cpp tests/test_cmake.cpp tests/test_conan.cpp tests/test_console.cpp tests/test_core.cpp tests/test_file_index.cpp tests/test_git.cpp tests/test_path_input.cpp tests/test_settings.cpp tests/test_workspaces.cpp)
     target_link_libraries(kamil_tests PRIVATE kamil_core)
     target_compile_options(kamil_tests PRIVATE ${KAMIL_WARNINGS})
     if(MINGW)

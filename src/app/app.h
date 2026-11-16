@@ -12,6 +12,8 @@
 
 #include "app/paths.h"
 #include "core/bookmarks.h"
+#include "core/conan.h"
+#include "core/workspaces.h"
 #include "core/cmake.h"
 #include "core/file_index.h"
 #include "core/hotkey.h"
@@ -160,6 +162,23 @@ private:
     void start_listing(const std::wstring& dir);
     void on_dir_listed(std::unique_ptr<DirListing> listing);
     void open_at_line(const std::wstring& file, int line, int column);
+
+    // Conan cache and workspaces (app_workspaces.cpp)
+    struct ConanScan {
+        std::wstring data_dir;
+        std::vector<ConanPackage> packages;
+    };
+    void scan_conan();
+    void on_conan_scanned(std::unique_ptr<ConanScan> scan);
+    void add_conan_items(std::vector<Item>& items) const;
+    void load_workspaces(const Settings& s, bool report);
+    void add_workspace_items(std::vector<Item>& items) const;
+    const Workspace* workspace_of(const Item& item) const;  // nullptr: not a workspace result
+    void open_workspace(const Item& item, bool check_branches);
+    void open_workspace_entry(const WorkspaceEntry& e, std::vector<std::wstring>& missing);
+    std::vector<Item> workspace_actions(const Item& item) const;
+    bool run_workspace_action(const Item& item, const std::wstring& action);
+    void before_show();  // refreshes what may have changed while the window was closed
     void check_bookmarks(bool notify_missing);  // logs (and reports) bookmarks whose path does not exist
 
     // Running programs (apps.bring_running)
@@ -270,6 +289,11 @@ private:
     ULONGLONG clip_changed_at_ = 0;             // last WM_CLIPBOARDUPDATE
     bool clip_dirty_ = false, clip_used_ = false;
     std::optional<Item> clip_item_;             // the copied path as a result
+    std::vector<ConanPackage> conan_;           // dev.conan: packages of the Conan cache
+    std::wstring conan_data_;
+    ULONGLONG conan_scanned_at_ = 0;
+    bool conan_scanning_ = false;
+    std::vector<Workspace> workspaces_;
     std::wstring last_project_;  // CMake project acted on last: target of action commands
 
     // Hotkeys with the Windows key go through a keyboard hook (Windows reserves many of them).

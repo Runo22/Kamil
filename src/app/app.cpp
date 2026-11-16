@@ -319,6 +319,10 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
     for (const auto& b : bookmarks_)  // so does a bookmark's keyword
         if (!b.keyword_folded.empty()) search_options_.aliases.push_back({b.keyword_folded, fold(b.name)});
     if (initial || touched(keys::kBookmarks)) check_bookmarks(!initial);
+    load_workspaces(s, !initial && touched(keys::kWorkspaces));
+    for (const auto& w : workspaces_)  // and a workspace's
+        if (!w.keyword_folded.empty()) search_options_.aliases.push_back({w.keyword_folded, fold(w.name)});
+    if (initial || touched(keys::kConan)) scan_conan();
     search_options_.folder_boosts.clear();
     for (const auto& obj : s.get_objects(keys::kFolderPriority)) {
         const Value* p = obj.find("path");
@@ -429,6 +433,8 @@ void App::rebuild_items() {
     add_user_command_items(items);
     if (store_.current()->get_bool(keys::kKnownFolders)) add_known_folder_items(items);
     add_bookmark_items(items);
+    add_conan_items(items);
+    add_workspace_items(items);
     for (const auto& repo : repos_) {
         Item it;
         it.kind = ItemKind::Repo;
@@ -479,6 +485,10 @@ void App::on_activate(const Item& item, LaunchMode mode) {
     if (search_options_.learning) {
         usage_.record(item.key, fold(trim(std::wstring_view(launcher_.query()))), now_unix());
         schedule_usage_save();
+    }
+    if (workspace_of(item)) {
+        open_workspace(item, true);
+        return;
     }
     if (item.kind == ItemKind::Command) {
         if (item.target == L"jobs") {  // a list inside the launcher: stay open
@@ -545,6 +555,7 @@ void App::run_command(const std::wstring& id) {
         apps_provider_.scan_async(hwnd_);
         scan_repos();
         scan_files();
+        scan_conan();
     } else if (id == L"forget") {
         if (MessageBoxW(hwnd_,
                         loc(L"Forget all learned favourites and search preferences?", L"Öğrenilen tüm sık kullanılanlar ve arama tercihleri silinsin mi?"),
@@ -671,6 +682,10 @@ std::vector<Item> App::actions_for(const Item& item) const {
             break;
         }
         case ItemKind::Command:
+            if (workspace_of(item)) {
+                actions = workspace_actions(item);
+                break;
+            }
             actions.push_back(make_action(L"run", loc(L"Run", L"Çalıştır"), {}, kGlyphPlay, item.subtitle));
             break;
         case ItemKind::File:
@@ -710,6 +725,7 @@ void App::run_action(const Item& parent, const std::wstring& action) {
             notify(parent.title, loc(L"It is not running any more.", L"Artık çalışmıyor."), Tray::Balloon::Info);
         return;
     }
+    if (run_workspace_action(parent, action)) return;
     if (parent.kind == ItemKind::Command) {
         launcher_.hide();
         run_command(parent.target);
@@ -878,7 +894,8 @@ Footer App::footer_for(const Item* selected, const Item* parent) {
         }
         case ItemKind::Command:
             f.left = with_job(selected->subtitle);
-            f.hints = {{L"Enter", loc(L"Run", L"Çalıştır"), Do::Activate}};
+            if (workspace_of(*selected)) f.hints = {{L"Enter", loc(L"Open all", L"Hepsini aç"), Do::Activate}, more};
+            else f.hints = {{L"Enter", loc(L"Run", L"Çalıştır"), Do::Activate}};
             break;
         case ItemKind::File: {
             f.left = with_job(selected->subtitle);
@@ -911,6 +928,7 @@ Footer App::footer_for(const Item* selected, const Item* parent) {
 void App::toggle_from_tray() {
     // Clicking the tray icon first deactivates the launcher (which hides it); do not reopen it.
     if (!launcher_.visible() && GetTickCount64() - launcher_.hidden_at() < 300) return;
+    if (!launcher_.visible()) before_show();
     launcher_.toggle();
 }
 
@@ -984,6 +1002,7 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             if (wp == kHotkeyId) {
                 // Folders that cannot be watched (e.g. some network shares): rescan when the window opens.
                 if (!launcher_.visible() && watched_roots_ < index_roots_ && GetTickCount64() - files_scanned_at_ > 120'000) scan_files();
+                if (!launcher_.visible()) before_show();
                 launcher_.toggle();
             }
             return 0;
@@ -1103,6 +1122,7 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
                 apps_provider_.scan_async(hwnd_);
                 scan_repos();
                 scan_files();
+                scan_conan();
             }
             return 0;
         case WM_SETTINGCHANGE:
@@ -1121,6 +1141,9 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_CLIPBOARDUPDATE:
             clip_changed_at_ = GetTickCount64();  // read only when the window opens
             clip_dirty_ = true;
+            return 0;
+        case WM_KAMIL_CONAN_READY:
+            on_conan_scanned(std::unique_ptr<ConanScan>(reinterpret_cast<ConanScan*>(lp)));
             return 0;
         case WM_KAMIL_DIR_LISTED:
             on_dir_listed(std::unique_ptr<DirListing>(reinterpret_cast<DirListing*>(lp)));

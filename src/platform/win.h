@@ -27,6 +27,7 @@ enum : UINT {
     WM_KAMIL_FS_CHANGES = WM_APP + 12,  // lParam: std::vector<FsChange>* (ownership transferred)
     WM_KAMIL_CONSOLE = WM_APP + 13,     // lParam: ConsoleOutput* (ownership transferred)
     WM_KAMIL_DIR_LISTED = WM_APP + 14,  // lParam: DirListing* (ownership transferred)
+    WM_KAMIL_CONAN_READY = WM_APP + 15, // lParam: ConanScan* (ownership transferred)
 };
 
 inline constexpr wchar_t kAppWindowClass[] = L"Kamil.AppWindow";

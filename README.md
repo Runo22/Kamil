@@ -18,6 +18,8 @@ Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 [Yer imleri](#yer-imleri-searchbookmarks) ·
 [Klasörde gezinme](#klasörde-gezinme-) ·
 [Dosyayı satırında aç](#dosyayı-satırında-aç-maincpp120) ·
+[Çalışma alanları](#çalışma-alanları-workspaces) ·
+[Conan paketleri](#conan-paketleri) ·
 [Dahili komutlar](#dahili-komutlar) ·
 [Ayarlar](#ayarlar) ·
 [Sorun giderme](#sorun-giderme) ·
@@ -251,6 +253,51 @@ commands:
   kullanılan) projeden `{project}` `{project_dir}` `{preset}` `{target}` `{config}` `{exe}` `{exe_dir}` `{com}` `{args}`.
 - Varsayılan olarak hiç komut yoktur.
 
+## Çalışma alanları (`workspaces`)
+
+Bir çalışma alanı, birlikte açtığın projeleri, klasörleri, dosyaları ve uygulamaları tek bir ada bağlar. Aramada adıyla
+(veya `keyword` ile) bulunur; `Enter` hepsini açar.
+
+```yaml
+workspaces:
+  - name: Sensor work
+    keyword: sen
+    open:
+      - path: 'D:\src\sensor'      # CMake projesi: Visual Studio'da
+        with: vs                   # default | vs | code | explorer | terminal
+        branch: develop            # git: başka daldaysa önce sorulur
+      - path: 'D:\src\sensor-lib'
+        with: code
+        branch: main
+      - path: '~\notes\sensor.md'  # dosya: varsayılan uygulamayla
+      - item: Tera Term            # uygulama, özel komut ya da yer imi (aramadaki tam adıyla)
+```
+
+- `with: default` öğenin `Enter`'da yaptığını yapar (projede `dev.repo_action`, klasörde Gezgin, dosyada aç/çalıştır).
+- **Git dalı:** `branch` verilen girdilerin dalı açmadan önce okunur (`.git\HEAD`, git.exe gerekmez; worktree'ler
+  dahil). Biri başka daldaysa liste çıkar: *sensor deposunu develop dalına geçir* satırı `git switch develop`'u Kamil
+  Console'da çalıştırır (yerel değişiklikler üzerine yazılacaksa git reddeder, çıktı nedenini söyler); *Yine de aç*
+  hepsini şu anki dallarıyla açar; `Esc` vazgeçer. Dal değiştikten sonra çalışma alanını yeniden aç.
+- `Ctrl+K`: *Hepsini aç* ve girdiler tek tek, her deponun şu anki dalıyla (beklenenden farklıysa ⚠).
+- Bulunamayan yollar ve adlar atlanır, bildirimde listelenir. Ağ yollarının dalı okunmaz (pencere donmasın diye).
+
+## Conan paketleri
+
+Conan 1 önbelleğindeki her paket aramada bir sonuçtur (alt satırda sürümleri: *Conan   10.2.1@acme/stable ·
+9.1.0@acme/stable*). Paket adıyla ya da `conan` yazarak bulunur. `Enter`:
+
+| Önbellekte | Açılan klasör |
+|---|---|
+| Birden çok sürüm (`fmt\9.1.0`, `fmt\10.2.1`) | `data\fmt` — sürümü sen seç |
+| Tek sürüm, birden çok user (`boost\1.81.0\acme`, `…\other`) | `data\boost\1.81.0` |
+| Tek user, birden çok channel | `data\…\<user>` |
+| Tek referans | `data\zlib\1.2.13\acme\stable` (export, package, source …) |
+
+- Klasör `Ctrl+K` ile VS Code, Visual Studio veya terminalde de açılır; `\` ile içine girilir.
+- Önbellek: `dev.conan_home` boşsa `CONAN_USER_HOME` tanımlıysa `%CONAN_USER_HOME%\.conan`, değilse
+  `%USERPROFILE%\.conan`. Liste açılışta, *Kamil: Rescan* ile ve pencere en son bir dakikadan önce açıldıysa yeniden
+  okunur. Kapatmak için `dev.conan: false`.
+
 ## Kamil Console
 
 `Alt+R` ile çalıştırılan programların çıktısı, Visual Studio build'lerinin **Build** bölmesi ve `console: hidden`
@@ -399,8 +446,11 @@ dev:
   build_before_debug: true
   run_in: kamil             # kamil (Console sekmesi) | console (ayrı pencere)
   console_on_build: on_error
+  conan: true               # Conan paketleri aramada
+  conan_home: ''            # boş: %CONAN_USER_HOME%\.conan, yoksa %USERPROFILE%\.conan
   vs_wait_seconds: 90
 commands: [...]             # yukarıda
+workspaces: [...]           # yukarıda (Çalışma alanları)
 ```
 
 ## Sorun giderme

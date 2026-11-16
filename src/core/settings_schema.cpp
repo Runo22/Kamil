@@ -270,6 +270,18 @@ Schema build() {
                          "Visual Studio açılana ya da bir komutu etkinleştirene kadar (ör. CMake hazırlanırken) en çok kaç saniye beklensin. Bekleyen işler 'Kamil: VS işleri' ile iptal edilebilir"});
         s.add(std::move(d));
     }
+    {
+        auto d = def(keys::kConan, Kind::Bool, true, {"Conan packages", "Conan paketleri"},
+                     {"Packages in the Conan 1 cache appear in the search (also found by typing 'conan'). Enter opens the package "
+                      "folder when it has several versions (or users / channels), otherwise the folder with export, package, "
+                      "source ...",
+                      "Conan 1 önbelleğindeki paketler aramada çıkar ('conan' yazınca da bulunur). Enter, paketin birden çok sürümü "
+                      "(ya da user / channel'ı) varsa paket klasörünü, yoksa export, package, source ... klasörünü açar"});
+        s.add(std::move(d));
+    }
+    s.add(def(keys::kConanHome, Kind::Path, "", {"Conan home", "Conan klasörü"},
+              {"The .conan folder; empty: %CONAN_USER_HOME%\\.conan when that variable is set, else %USERPROFILE%\\.conan",
+               ".conan klasörü; boş: CONAN_USER_HOME tanımlıysa %CONAN_USER_HOME%\\.conan, değilse %USERPROFILE%\\.conan"}));
     s.set_section_title("apps", "Applications", "Uygulamalar");
     s.add(def(keys::kBringRunning, Kind::GlobList, Value::List{}, {"Bring the running window", "Açık pencereyi getir"},
               {"Programs that are not started a second time: when one is already running, Enter brings its window to the front on "
@@ -319,6 +331,37 @@ Schema build() {
         }
         d.fields.push_back(field("admin", Kind::Bool, false, {"Run as administrator", "Yönetici olarak çalıştır"}));
         d.fields.push_back(field("confirm", Kind::Bool, false, {"Ask before running", "Çalıştırmadan önce sor"}));
+        s.add(std::move(d));
+    }
+    {
+        auto d = def(keys::kWorkspaces, Kind::ObjectList, Value::Objects{}, {"Workspaces", "Çalışma alanları"},
+                     {"One name opens projects, folders, files and apps together. A git repository with a 'branch' is checked "
+                      "first: when it is on another branch Kamil asks (switch it, or open anyway). Ctrl+K lists the entries with "
+                      "their branches",
+                      "Tek bir ad projeleri, klasörleri, dosyaları ve uygulamaları birlikte açar. 'branch' verilen git deposu önce "
+                      "denetlenir: başka bir daldaysa Kamil sorar (dalı değiştir ya da yine de aç). Ctrl+K girdileri dallarıyla "
+                      "listeler"});
+        d.fields.push_back(field("name", Kind::String, "", {"Shown in the search, e.g. 'Sensor work'", "Aramada görünen ad, ör. 'Sensör işi'"}, true));
+        d.fields.push_back(field("keyword", Kind::String, "", {"Typed exactly, it puts the workspace first, e.g. 'sen'",
+                                                             "Tam olarak yazılınca çalışma alanını en üste getirir, ör. 'sen'"}));
+        SettingDef open = field("open", Kind::ObjectList, Value::Objects{},
+                                {"What to open: '- { path: ..., with: ..., branch: ... }' or '- { item: Tera Term }'",
+                                 "Açılacaklar: '- { path: ..., with: ..., branch: ... }' ya da '- { item: Tera Term }'"},
+                                true);
+        open.fields.push_back(field("path", Kind::Path, "", {"Project, folder or file, e.g. 'D:\\src\\sensor' (%VARS% and ~ allowed)",
+                                                           "Proje, klasör ya da dosya, ör. 'D:\\src\\sensor' (%DEĞİŞKEN% ve ~ olur)"}));
+        open.fields.push_back(field("item", Kind::String, "", {"Instead of 'path': a search result by its exact name (app, command, bookmark)",
+                                                             "'path' yerine: tam adıyla bir arama sonucu (uygulama, komut, yer imi)"}));
+        {
+            SettingDef with = field("with", Kind::Enum, "default",
+                                    {"default (as Enter does) | vs | code | explorer | terminal",
+                                     "default (Enter ne yapıyorsa) | vs | code | explorer | terminal"});
+            with.choices = {"default", "vs", "code", "explorer", "terminal"};
+            open.fields.push_back(std::move(with));
+        }
+        open.fields.push_back(field("branch", Kind::String, "", {"Git branch the repository should be on, e.g. develop",
+                                                               "Deponun olması gereken git dalı, ör. develop"}));
+        d.fields.push_back(std::move(open));
         s.add(std::move(d));
     }
     return s;
