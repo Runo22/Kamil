@@ -468,8 +468,10 @@ void App::run_query(const std::wstring& query) {
     std::vector<Hit> hits;
     // "main.cpp:120" opens a file at a line; "C:\x\" lists a folder; otherwise the normal search.
     if (!location_query(query, hits) && !browse_query(query, hits)) {
-        hits = search(items_, query, usage_, search_options_);
-        add_file_hits(query, hits);
+        if (!conan_query(query, hits)) {
+            hits = search(items_, query, usage_, search_options_);
+            add_file_hits(query, hits);
+        }
         if (trim(std::wstring_view(query)).empty()) add_clipboard_hit(hits);
     }
     QueryPerformanceCounter(&t1);

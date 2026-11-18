@@ -298,3 +298,14 @@ TEST(search_keywords) {
     hits = search(items, L"settings", usage, opt);
     CHECK(!hits.empty() && hits[0].item->key == L"kamil:settings");
 }
+
+TEST(search_scoped_query) {
+    CHECK(scoped_query(L"conan", L"conan") == std::optional<std::wstring>(L""));
+    CHECK(scoped_query(L"  Conan ", L"conan") == std::optional<std::wstring>(L""));
+    CHECK(scoped_query(L"conan fmt", L"conan") == std::optional<std::wstring>(L"fmt"));
+    CHECK(scoped_query(L"CONAN   boost 1.8", L"conan") == std::optional<std::wstring>(L"boost 1.8"));
+    CHECK(!scoped_query(L"conanfile", L"conan"));
+    CHECK(!scoped_query(L"my conan", L"conan"));
+    CHECK(!scoped_query(L"cona", L"conan"));
+    CHECK(!scoped_query(L"", L"conan"));
+}

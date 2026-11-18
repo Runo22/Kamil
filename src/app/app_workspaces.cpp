@@ -6,6 +6,7 @@
 
 #include "app/action_item.h"
 #include "app/app.h"
+#include "core/fuzzy.h"
 #include "core/i18n.h"
 #include "core/log.h"
 #include "core/settings_schema.h"
@@ -89,6 +90,46 @@ void App::add_conan_items(std::vector<Item>& items) const {
         it.prepare();
         items.push_back(std::move(it));
     }
+}
+
+bool App::conan_query(const std::wstring& query, std::vector<Hit>& hits) {
+    if (conan_.empty()) return false;
+    const auto rest = scoped_query(query, L"conan");
+    if (!rest) return false;
+    std::vector<Hit> packages;
+    const FuzzyMatcher matcher(*rest);
+    for (const auto& it : items_) {
+        if (it.key.rfind(L"conan:", 0) != 0) continue;
+        Hit h{&it, 0, {}};
+        if (!matcher.empty()) {
+            auto score = matcher.match(it.title, it.title_folded, &h.positions);
+            if (!score) continue;
+            h.score = *score;
+        }
+        packages.push_back(std::move(h));
+    }
+    // Best match first; without a filter alphabetically (hit_better: shorter, then by name).
+    std::sort(packages.begin(), packages.end(), [&](const Hit& a, const Hit& b) {
+        if (matcher.empty()) return a.item->title_folded < b.item->title_folded;
+        return hit_better(a, b);
+    });
+    if (!rest->empty()) {
+        hits = std::move(packages);  // "conan fmt": only packages
+        return true;
+    }
+    // "conan": keyword matches (the Conan cache bookmark) stay on top, the packages follow, then
+    // everything else (a project's own conan folder ...).
+    std::vector<Hit> normal = search(items_, query, usage_, search_options_);
+    add_file_hits(query, normal);
+    std::vector<Hit> top, rest_hits;
+    for (auto& h : normal) {
+        if (h.item->key.rfind(L"conan:", 0) == 0) continue;
+        (h.score >= 100'000 ? top : rest_hits).push_back(std::move(h));  // alias / keyword boost
+    }
+    hits = std::move(top);
+    for (auto& h : packages) hits.push_back(std::move(h));
+    for (auto& h : rest_hits) hits.push_back(std::move(h));
+    return true;
 }
 
 void App::before_show() {

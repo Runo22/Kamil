@@ -302,7 +302,8 @@ workspaces:
 ## Conan paketleri
 
 Conan 1 önbelleğindeki her paket aramada bir sonuçtur (alt satırda sürümleri: *Conan   10.2.1@acme/stable ·
-9.1.0@acme/stable*). Paket adıyla ya da `conan` yazarak bulunur. `Enter`:
+9.1.0@acme/stable*). Paket adıyla bulunur; `conan` yazınca önce (keyword'ü `conan` olan yer imi, sonra) **tüm paketler**
+gelir, aynı adlı klasörler altta kalır. `conan fmt` yalnızca paketlerde arar. `Enter`:
 
 | Önbellekte | Açılan klasör |
 |---|---|

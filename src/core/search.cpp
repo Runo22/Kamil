@@ -50,6 +50,14 @@ int folder_bonus(std::wstring_view path, const std::vector<FolderBoost>& boosts)
     return bonus;
 }
 
+std::optional<std::wstring> scoped_query(std::wstring_view query, std::wstring_view scope) {
+    const std::wstring_view q = trim(query);
+    if (q.size() < scope.size() || fold(q.substr(0, scope.size())) != fold(scope)) return std::nullopt;
+    if (q.size() == scope.size()) return std::wstring();
+    if (q[scope.size()] != L' ') return std::nullopt;
+    return std::wstring(trim(q.substr(scope.size())));
+}
+
 bool add_unique_hit(std::vector<Hit>& hits, Hit hit) {
     for (auto& h : hits) {
         if (h.item->key != hit.item->key) continue;

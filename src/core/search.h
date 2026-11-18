@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -51,6 +52,10 @@ bool hit_better(const Hit& a, const Hit& b);
 // title: a bookmark keeps its own name over the file index's file name) and takes the better score.
 // Returns whether `hit` was added.
 bool add_unique_hit(std::vector<Hit>& hits, Hit hit);
+
+// A search scoped by its first word: "conan" -> "" and "conan fmt" -> "fmt" for scope "conan"
+// (case and accent insensitive); nullopt for any other query ("conanfile", "my conan").
+std::optional<std::wstring> scoped_query(std::wstring_view query, std::wstring_view scope);
 
 // Ranks `items` for `query`. Score = fuzzy match + learned affinity + frecency (+ alias boost).
 // With an empty query it returns the most frequently/recently used items.

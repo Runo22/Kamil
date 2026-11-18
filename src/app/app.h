@@ -171,6 +171,9 @@ private:
     void scan_conan();
     void on_conan_scanned(std::unique_ptr<ConanScan> scan);
     void add_conan_items(std::vector<Item>& items) const;
+    // "conan": packages right after keyword matches (bookmarks), then the rest; "conan fmt": only
+    // packages matching "fmt". False when the query is not about Conan.
+    bool conan_query(const std::wstring& query, std::vector<Hit>& hits);
     void load_workspaces(const Settings& s, bool report);
     void add_workspace_items(std::vector<Item>& items) const;
     const Workspace* workspace_of(const Item& item) const;  // nullptr: not a workspace result
