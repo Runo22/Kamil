@@ -531,6 +531,6 @@ src/providers/  sonuç kaynakları (uygulamalar, git depoları)
 src/ui/         arama penceresi ve Kamil Console (Direct2D)
 src/app/        uygulama: ayarların uygulanması, projeler, dosyalar, komutlar, konsol, tanılama
 tests/          birim testleri + kamil_bench
-tools/          vs-probe.ps1: VS2022/2026 DTE (COM) yeteneklerini ölçer
-third_party/    rapidyaml (MIT)
+tools/          vs-probe.ps1: VS2022/2026 DTE (COM) yeteneklerini ölçer; gen_fluent_icons.py: src/ui/fluent_icons.h
+third_party/    rapidyaml (MIT); fluentui-system-icons (MIT, eylem ikonlarının path verisi)
 ```

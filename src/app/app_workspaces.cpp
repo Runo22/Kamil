@@ -86,7 +86,9 @@ void App::add_conan_items(std::vector<Item>& items) const {
         const std::wstring refs = conan_summary(p);
         it.subtitle = L"Conan   " + (refs.empty() ? folder : refs);
         it.keywords = L"conan";
-        it.icon_key = L"icon:folder";
+        it.icon_source.clear();  // the package icon, not the folder's
+        it.icon_key.clear();
+        it.glyph = kGlyphBox;
         it.prepare();
         items.push_back(std::move(it));
     }
@@ -164,7 +166,7 @@ void App::add_workspace_items(std::vector<Item>& items) const {
         }
         it.subtitle = loc(L"Workspace", L"Çalışma alanı") + std::wstring(L"   ") + what;
         it.keywords = loc(L"workspace", L"çalışma alanı workspace");
-        it.glyph = kGlyphFolder;
+        it.glyph = kGlyphApps;
         it.prepare();
         items.push_back(std::move(it));
     }

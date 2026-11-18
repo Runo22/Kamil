@@ -6,9 +6,9 @@
 
 namespace kamil {
 
-// Glyphs for actions without a program icon. Private-use code points (U+E000..U+F8FF) are drawn
-// with Segoe MDL2 Assets; other symbols (⎇ ◎ ⇄), which that font does not have (they showed as
-// empty boxes), with Segoe UI Symbol. See LauncherWindow::draw_row.
+// Icons of results without a program icon. Each code is drawn as its Fluent UI System Icon in a
+// category colour (src/ui/fluent_icons.h); codes not listed there fall back to the font: Segoe MDL2
+// Assets for private-use code points, Segoe UI Symbol for the rest. See LauncherWindow::draw_row.
 inline constexpr wchar_t kGlyphCopy = 0xE8C8;      // MDL2 Copy
 inline constexpr wchar_t kGlyphFolder = 0xE8B7;    // MDL2 Folder
 inline constexpr wchar_t kGlyphAdmin = 0xE7EF;     // MDL2 Admin
@@ -25,6 +25,8 @@ inline constexpr wchar_t kGlyphSync = 0xE895;      // MDL2 Sync (git fetch)
 inline constexpr wchar_t kGlyphDownload = 0xE896;  // MDL2 Download (git pull)
 inline constexpr wchar_t kGlyphUpload = 0xE898;    // MDL2 Upload (git push)
 inline constexpr wchar_t kGlyphHistory = 0xE81C;   // MDL2 History (git log)
+inline constexpr wchar_t kGlyphBox = 0xE7B8;       // MDL2 Package (Conan package)
+inline constexpr wchar_t kGlyphApps = 0xE71D;      // MDL2 AllApps (workspace)
 inline constexpr wchar_t kGlyphBranch = 0x2387;    // ⎇ (Segoe UI Symbol)
 inline constexpr wchar_t kGlyphTarget = 0x25CE;    // ◎ (Segoe UI Symbol)
 inline constexpr wchar_t kGlyphSerial = 0x21C4;    // ⇄ (Segoe UI Symbol)

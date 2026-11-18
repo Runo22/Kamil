@@ -9,8 +9,10 @@
 #include "core/fuzzy.h"
 #include "core/hotkey.h"
 #include "core/i18n.h"
+#include "core/svg_path.h"
 #include "core/text.h"
 #include "platform/system_theme.h"
+#include "ui/fluent_icons.h"
 
 namespace kamil {
 
@@ -785,6 +787,61 @@ void LauncherWindow::on_icon(const IconResult& r) {
     if (visible()) render();
 }
 
+ID2D1PathGeometry* LauncherWindow::icon_geometry(wchar_t glyph, float* view, uint32_t* rgb) {
+    const FluentIcon* icon = nullptr;
+    for (const auto& f : kFluentIcons)
+        if (f.glyph == glyph) icon = &f;
+    if (!icon) return nullptr;
+    *view = icon->view;
+    *rgb = icon->rgb;
+    auto& slot = icon_geometry_[glyph];
+    if (slot) return slot.Get();
+    // Built once from the SVG path data; factory resources survive a lost device.
+    ID2D1Factory1* factory = renderer_.d2d_factory();
+    ComPtr<ID2D1PathGeometry> geometry;
+    ComPtr<ID2D1GeometrySink> sink;
+    if (!factory || FAILED(factory->CreatePathGeometry(&geometry)) || FAILED(geometry->Open(&sink))) return nullptr;
+    sink->SetFillMode(D2D1_FILL_MODE_WINDING);  // SVG's default fill rule (nonzero)
+    bool open = false;
+    D2D1_POINT_2F start{}, current{};
+    for (const PathCmd& c : parse_svg_path(icon->path)) {
+        const D2D1_POINT_2F to{c.x, c.y};
+        if (c.type == PathCmd::Type::Move) {
+            if (open) sink->EndFigure(D2D1_FIGURE_END_OPEN);
+            sink->BeginFigure(to, D2D1_FIGURE_BEGIN_FILLED);
+            open = true;
+            start = current = to;
+            continue;
+        }
+        if (c.type == PathCmd::Type::Close) {
+            if (open) sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            open = false;
+            current = start;
+            continue;
+        }
+        if (!open) {  // drawing on after Z: a new figure from the closed one's start
+            sink->BeginFigure(current, D2D1_FIGURE_BEGIN_FILLED);
+            open = true;
+        }
+        switch (c.type) {
+            case PathCmd::Type::Line: sink->AddLine(to); break;
+            case PathCmd::Type::Cubic: sink->AddBezier(D2D1::BezierSegment({c.x1, c.y1}, {c.x2, c.y2}, to)); break;
+            case PathCmd::Type::Quad: sink->AddQuadraticBezier(D2D1::QuadraticBezierSegment({c.x1, c.y1}, to)); break;
+            case PathCmd::Type::Arc:
+                sink->AddArc(D2D1::ArcSegment(to, D2D1::SizeF(c.rx, c.ry), c.rotation,
+                                              c.sweep ? D2D1_SWEEP_DIRECTION_CLOCKWISE : D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
+                                              c.large_arc ? D2D1_ARC_SIZE_LARGE : D2D1_ARC_SIZE_SMALL));
+                break;
+            default: break;
+        }
+        current = to;
+    }
+    if (open) sink->EndFigure(D2D1_FIGURE_END_OPEN);
+    if (FAILED(sink->Close())) return nullptr;
+    slot = geometry;
+    return slot.Get();
+}
+
 ID2D1Bitmap1* LauncherWindow::icon_for(const Item& item) {
     const uint32_t want = static_cast<uint32_t>(std::lround(px(s(32.f))));
     const std::wstring& key = item.icon_cache_key();
@@ -947,8 +1004,26 @@ void LauncherWindow::draw_row(ID2D1DeviceContext* dc, size_t index, float y) {
     const float ix = std::round(px(x0 + 16.f)) * to_dip;
     const float iy = std::round(px(y + (row_h_ - icon) / 2.f)) * to_dip;
     ID2D1Bitmap1* bmp = item.glyph && item.icon_source.empty() ? nullptr : icon_for(item);
+    float view = 0;
+    uint32_t rgb = 0;
+    ID2D1PathGeometry* geometry = !bmp && item.glyph ? icon_geometry(item.glyph, &view, &rgb) : nullptr;
     if (bmp) {
         dc->DrawBitmap(bmp, D2D1::RectF(ix, iy, ix + icon, iy + icon), 1.f, D2D1_INTERPOLATION_MODE_LINEAR);  // 1:1 when sizes match
+    } else if (geometry) {
+        // A Fluent icon in its category colour on a very light tile of the same colour.
+        const bool dark = pal_.surface.r + pal_.surface.g + pal_.surface.b < 1.5f;
+        D2D1_COLOR_F c = D2D1::ColorF(rgb);
+        if (dark) c = D2D1::ColorF(c.r + (1.f - c.r) * 0.3f, c.g + (1.f - c.g) * 0.3f, c.b + (1.f - c.b) * 0.3f);
+        brush->SetColor(with_alpha(c, dark ? 0.22f : 0.13f));
+        dc->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(ix, iy, ix + icon, iy + icon), 7.f, 7.f), brush.Get());
+        const float size = icon * 20.f / 32.f;
+        const float ox = ix + (icon - size) / 2.f, oy = iy + (icon - size) / 2.f;
+        D2D1_MATRIX_3X2_F old;
+        dc->GetTransform(&old);
+        dc->SetTransform(D2D1::Matrix3x2F::Scale(size / view, size / view) * D2D1::Matrix3x2F::Translation(ox, oy) * old);
+        brush->SetColor(c);
+        dc->FillGeometry(geometry, brush.Get());
+        dc->SetTransform(old);
     } else if (IDWriteTextFormat* glyph_fmt = item.glyph >= 0xE000 && item.glyph <= 0xF8FF ? fmt_glyph_.Get() : fmt_symbol_.Get();
                item.glyph && glyph_fmt) {  // no program icon (or it could not be extracted)
         brush->SetColor(with_alpha(pal_.text_secondary, 0.14f));

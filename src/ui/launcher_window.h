@@ -135,6 +135,7 @@ private:
     void render();
     void draw_row(ID2D1DeviceContext* dc, size_t index, float y);
     ID2D1Bitmap1* icon_for(const Item& item);
+    ID2D1PathGeometry* icon_geometry(wchar_t glyph, float* view, uint32_t* rgb);  // nullptr: no Fluent icon
     int row_at(int x_px, int y_px) const;
     int hint_at(int x_px, int y_px) const;
     void run_hint(const FooterHint& hint);
@@ -147,6 +148,7 @@ private:
     Callbacks cb_;
     LauncherStyle style_;
     Renderer renderer_;
+    std::unordered_map<wchar_t, ComPtr<ID2D1PathGeometry>> icon_geometry_;  // Fluent icons, by glyph code
     float dpi_ = 96.f;
     Palette pal_{};
     bool dark_ = true;
