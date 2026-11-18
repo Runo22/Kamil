@@ -186,6 +186,14 @@ void LauncherWindow::create_text_formats() {
         fmt_glyph_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
         fmt_glyph_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
     }
+    // Symbols outside the icon font (⎇ ◎ ⇄): Segoe MDL2 Assets draws them as empty boxes.
+    fmt_symbol_.Reset();
+    dw->CreateTextFormat(L"Segoe UI Symbol", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                         DWRITE_FONT_STRETCH_NORMAL, std::round(base * 1.3f), L"", &fmt_symbol_);
+    if (fmt_symbol_) {
+        fmt_symbol_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        fmt_symbol_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    }
     if (fmt_footer_) {
         DWRITE_TRIMMING trim_footer{DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
         ComPtr<IDWriteInlineObject> ellipsis;
@@ -429,7 +437,7 @@ void LauncherWindow::prompt(const Item& parent, std::wstring placeholder, std::w
     hint.target = L"prompt";
     hint.title = loc(L"Press Enter to save", L"Enter ile kaydet");
     hint.subtitle = std::move(help);
-    hint.glyph = 0x270E;  // ✎
+    hint.glyph = 0xE70F;  // MDL2 Edit
     hint.prepare();
     action_items_ = {std::move(hint)};
     hits_ = {Hit{&action_items_.front(), 0, {}}};
@@ -941,12 +949,13 @@ void LauncherWindow::draw_row(ID2D1DeviceContext* dc, size_t index, float y) {
     ID2D1Bitmap1* bmp = item.glyph && item.icon_source.empty() ? nullptr : icon_for(item);
     if (bmp) {
         dc->DrawBitmap(bmp, D2D1::RectF(ix, iy, ix + icon, iy + icon), 1.f, D2D1_INTERPOLATION_MODE_LINEAR);  // 1:1 when sizes match
-    } else if (item.glyph && fmt_glyph_) {  // no program icon (or it could not be extracted)
+    } else if (IDWriteTextFormat* glyph_fmt = item.glyph >= 0xE000 && item.glyph <= 0xF8FF ? fmt_glyph_.Get() : fmt_symbol_.Get();
+               item.glyph && glyph_fmt) {  // no program icon (or it could not be extracted)
         brush->SetColor(with_alpha(pal_.text_secondary, 0.14f));
         dc->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(ix, iy, ix + icon, iy + icon), 7.f, 7.f), brush.Get());
         const wchar_t g[2] = {item.glyph, 0};
         brush->SetColor(pal_.text);
-        dc->DrawText(g, 1, fmt_glyph_.Get(), D2D1::RectF(ix, iy, ix + icon, iy + icon), brush.Get());
+        dc->DrawText(g, 1, glyph_fmt, D2D1::RectF(ix, iy, ix + icon, iy + icon), brush.Get());
     } else {
         brush->SetColor(with_alpha(pal_.text_secondary, 0.18f));
         dc->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(ix, iy, ix + icon, iy + icon), 7.f, 7.f), brush.Get());

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <set>
 
 #include "core/text.h"
@@ -57,13 +59,48 @@ std::wstring conan_home(const std::wstring& setting, const std::wstring& conan_u
     return profile.empty() ? std::wstring() : join(profile, L".conan");
 }
 
-std::wstring conan_data_dir(const std::wstring& home) {
-    if (home.empty()) return {};
-    const std::wstring direct = join(home, L"data");
-    if (is_dir(direct)) return direct;
-    const std::wstring nested = join(join(home, L".conan"), L"data");
-    if (is_dir(nested)) return nested;
+std::wstring conan_storage_path(const std::string& conf) {
+    bool in_storage = false;
+    size_t start = 0;
+    while (start < conf.size()) {
+        size_t end = conf.find('\n', start);
+        if (end == std::string::npos) end = conf.size();
+        std::string_view line = trim(std::string_view(conf).substr(start, end - start));
+        start = end + 1;
+        if (line.empty() || line[0] == '#' || line[0] == ';') continue;
+        if (line.front() == '[') {
+            in_storage = to_lower_ascii(line) == "[storage]";
+            continue;
+        }
+        if (!in_storage) continue;
+        const size_t eq = line.find('=');
+        if (eq == std::string_view::npos || to_lower_ascii(trim(line.substr(0, eq))) != "path") continue;
+        return widen(trim(line.substr(eq + 1)));
+    }
     return {};
+}
+
+std::wstring conan_data_dir(const std::wstring& home, const std::wstring& profile) {
+    if (home.empty()) return {};
+    auto in_home = [&](const std::wstring& h) -> std::wstring {
+        std::string conf;
+        {
+            std::ifstream in(fs::path(join(h, L"conan.conf")), std::ios::binary);
+            if (in) conf.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        }
+        std::wstring storage = conan_storage_path(conf);
+        if (!storage.empty()) {
+            if (storage[0] == L'~' && !profile.empty()) storage = profile + storage.substr(1);
+            fs::path p(storage);
+            if (p.is_relative()) p = fs::path(h) / p;
+            const std::wstring dir = p.lexically_normal().wstring();
+            if (is_dir(dir)) return dir;
+        }
+        const std::wstring direct = join(h, L"data");
+        return is_dir(direct) ? direct : std::wstring();
+    };
+    if (std::wstring d = in_home(home); !d.empty()) return d;
+    return in_home(join(home, L".conan"));
 }
 
 std::vector<ConanPackage> scan_conan_data(const std::wstring& data_dir, size_t max_refs) {

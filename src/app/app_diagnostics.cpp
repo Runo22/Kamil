@@ -8,6 +8,7 @@
 #include "app/app.h"
 #include "core/i18n.h"
 #include "core/log.h"
+#include "core/settings_schema.h"
 #include "core/text.h"
 #include "platform/crash.h"
 
@@ -105,6 +106,11 @@ void App::write_diagnostics() {
     } else {
         line(L"Indexed files and folders", L"none (no search.folders, or the first scan is running)");
     }
+    if (!store_.current()->get_bool(keys::kConan)) line(L"Conan", L"off (dev.conan: false)");
+    else if (conan_data_.empty()) line(L"Conan", L"no cache found (" + std::wstring(conan_scanning_ ? L"scanning" : L"looked for <home>\\data") +
+                                                    L"; CONAN_USER_HOME, %USERPROFILE%\\.conan or dev.conan_home)");
+    else line(L"Conan", conan_data_ + L": " + std::to_wstring(conan_.size()) + L" packages");
+    line(L"Workspaces", std::to_wstring(workspaces_.size()));
     for (const auto& b : bookmarks_) {
         std::error_code ec;
         const std::wstring state = is_unc_path(b.path) ? L"network path, not checked"

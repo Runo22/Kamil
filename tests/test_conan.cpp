@@ -111,3 +111,27 @@ TEST(conan_version_order) {
     CHECK(compare_versions(L"1.0-rc1", L"1.0-rc2") < 0);
     CHECK(compare_versions(L"", L"1") < 0);
 }
+
+TEST(conan_storage_path_setting) {
+    CHECK_EQ(conan_storage_path("[log]\nlevel = 50\n\n[storage]\n# This is the default path\npath = ./data\n\n[proxies]\n"), L"./data");
+    CHECK_EQ(conan_storage_path("[storage]\r\nPath=D:\\conan\\data\r\n"), L"D:\\conan\\data");
+    CHECK(conan_storage_path("[general]\npath = x\n").empty());   // not the storage section
+    CHECK(conan_storage_path("[storage]\n# path = ./other\n").empty());
+    CHECK(conan_storage_path("").empty());
+
+    const fs::path root = make_cache("kamil_test_conan_storage");
+    fs::create_directories(root / ".conan");
+    fs::create_directories(root / "elsewhere" / "pkgs");
+    std::ofstream(root / ".conan" / "conan.conf") << "[storage]\npath = " << (root / "elsewhere" / "pkgs").string() << "\n";
+    CHECK_EQ(conan_data_dir(w(root / ".conan")), w((root / "elsewhere" / "pkgs").lexically_normal()));
+    // Relative to the home.
+    fs::create_directories(root / ".conan" / "store");
+    std::ofstream(root / ".conan" / "conan.conf") << "[storage]\npath = ./store\n";
+    CHECK_EQ(conan_data_dir(w(root / ".conan")), w((root / ".conan" / "store").lexically_normal()));
+    CHECK_EQ(conan_data_dir(w(root)), w((root / ".conan" / "store").lexically_normal()));  // parent of .conan
+    // A storage path that does not exist: back to <home>/data.
+    fs::create_directories(root / ".conan" / "data");
+    std::ofstream(root / ".conan" / "conan.conf") << "[storage]\npath = ./nope\n";
+    CHECK_EQ(conan_data_dir(w(root / ".conan")), w(root / ".conan" / "data"));
+    fs::remove_all(root);
+}

@@ -53,10 +53,11 @@ void App::scan_conan() {
     conan_scanned_at_ = GetTickCount64();
     const std::wstring home = conan_home(expand_env(widen(s->get_string(keys::kConanHome))), env_var(L"CONAN_USER_HOME"), home_dir());
     const HWND target = hwnd_;
+    const std::wstring profile = home_dir();
     // Its own thread: CONAN_USER_HOME may be on a network drive.
-    std::thread([home, target] {
+    std::thread([home, profile, target] {
         auto* scan = new ConanScan;
-        scan->data_dir = conan_data_dir(home);
+        scan->data_dir = conan_data_dir(home, profile);
         scan->packages = scan_conan_data(scan->data_dir);
         post_owned(target, WM_KAMIL_CONAN_READY, scan);
     }).detach();

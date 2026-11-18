@@ -151,7 +151,7 @@ private:
     Palette pal_{};
     bool dark_ = true;
 
-    ComPtr<IDWriteTextFormat> fmt_input_, fmt_title_, fmt_subtitle_, fmt_hint_, fmt_letter_, fmt_glyph_, fmt_footer_, fmt_key_;
+    ComPtr<IDWriteTextFormat> fmt_input_, fmt_title_, fmt_subtitle_, fmt_hint_, fmt_letter_, fmt_glyph_, fmt_symbol_, fmt_footer_, fmt_key_;
     ComPtr<IDWriteInlineObject> ellipsis_title_, ellipsis_subtitle_;
 
     LineEdit edit_;

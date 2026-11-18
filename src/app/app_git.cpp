@@ -37,15 +37,15 @@ void App::add_git_actions(const std::wstring& path, std::vector<Item>& list) con
         if (s.behind) behind = L"   ↓" + std::to_wstring(s.behind);
     }
     const std::wstring on = branch.empty() ? std::wstring() : L"⎇ " + branch + L"   ";
-    list.push_back(make_action(L"git-status", loc(L"Git status", L"Git durumu"), {}, kGlyphBranch,
+    list.push_back(make_action(L"git-status", loc(L"Git status", L"Git durumu"), {}, kGlyphList,
                                on + (changes.empty() ? L"git status" : changes) + ahead + behind));
     list.push_back(make_action(L"git-switch-pick", loc(L"Git: switch branch…", L"Git: dal değiştir…"), {}, kGlyphBranch,
                                branch.empty() ? std::wstring(L"git switch") : fmt(loc(L"Now on {}", L"Şu an {}"), branch)));
-    list.push_back(make_action(L"git-fetch", loc(L"Git fetch", L"Git fetch"), {}, kGlyphRefresh, L"git fetch --all --prune"));
-    list.push_back(make_action(L"git-pull", loc(L"Git pull", L"Git pull"), {}, kGlyphRefresh,
+    list.push_back(make_action(L"git-fetch", loc(L"Git fetch", L"Git fetch"), {}, kGlyphSync, L"git fetch --all --prune"));
+    list.push_back(make_action(L"git-pull", loc(L"Git pull", L"Git pull"), {}, kGlyphDownload,
                                L"git pull --ff-only" + behind));
-    list.push_back(make_action(L"git-push", loc(L"Git push", L"Git push"), {}, kGlyphRefresh, L"git push" + ahead));
-    list.push_back(make_action(L"git-log", loc(L"Git log", L"Git geçmişi"), {}, kGlyphBranch,
+    list.push_back(make_action(L"git-push", loc(L"Git push", L"Git push"), {}, kGlyphUpload, L"git push" + ahead));
+    list.push_back(make_action(L"git-log", loc(L"Git log", L"Git geçmişi"), {}, kGlyphHistory,
                                loc(L"Last 30 commits (git log --oneline --graph)", L"Son 30 commit (git log --oneline --graph)")));
 }
 

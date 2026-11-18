@@ -313,7 +313,8 @@ Conan 1 önbelleğindeki her paket aramada bir sonuçtur (alt satırda sürümle
 
 - Klasör `Ctrl+K` ile VS Code, Visual Studio veya terminalde de açılır; `\` ile içine girilir.
 - Önbellek: `dev.conan_home` boşsa `CONAN_USER_HOME` tanımlıysa `%CONAN_USER_HOME%\.conan`, değilse
-  `%USERPROFILE%\.conan`. Liste açılışta, *Kamil: Rescan* ile ve pencere en son bir dakikadan önce açıldıysa yeniden
+  `%USERPROFILE%\.conan`. Paketler `conan.conf` içindeki `[storage] path` neredeyse oradan okunur (varsayılan `./data`).
+  Bulunamazsa *Kamil: Diagnostics* raporundaki `Conan:` satırı nereye bakıldığını söyler. Liste açılışta, *Kamil: Rescan* ile ve pencere en son bir dakikadan önce açıldıysa yeniden
   okunur. Kapatmak için `dev.conan: false`.
 
 ## Kamil Console

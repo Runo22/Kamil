@@ -29,9 +29,14 @@ struct ConanPackage {
 // when given, else %CONAN_USER_HOME%\.conan when that variable is set, else <profile>\.conan.
 std::wstring conan_home(const std::wstring& setting, const std::wstring& conan_user_home, const std::wstring& profile);
 
-// The data folder of a Conan home: <home>\data, or <home>\.conan\data when the setting names the
-// parent of .conan (as CONAN_USER_HOME does). Empty when there is none.
-std::wstring conan_data_dir(const std::wstring& home);
+// The data folder of a Conan home: [storage] path of <home>\conan.conf when set (relative to the
+// home, "~" = `profile`), else <home>\data; the same under <home>\.conan when the setting names
+// the parent of .conan (as CONAN_USER_HOME does). Empty when there is none.
+std::wstring conan_data_dir(const std::wstring& home, const std::wstring& profile = {});
+
+// The "path" of the [storage] section of a conan.conf text, as written ("./data", "D:\\conan");
+// empty when it is not set.
+std::wstring conan_storage_path(const std::string& conan_conf);
 
 // Reads <data>\<name>\<version>\<user>\<channel> (folders only). Packages without any complete
 // reference are listed too (their folder is still worth opening).
