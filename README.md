@@ -455,11 +455,13 @@ Aramada yazarak bulunur (İngilizce veya Türkçe adıyla):
 | Kamil: Forget what was learned / *Öğrenilenleri sıfırla* | Sık kullanılanları ve arama tercihlerini siler |
 | Kamil: Test VS connection / *VS bağlantısını test et* | VS kurulumları, açık örnekler, yönetici durumu, CMake komut adları raporu |
 | Kamil: Diagnostics / *Tanılama* | Sürüm, klasörler, indeks, arama hızı, VS, çökme dökümleri raporu |
+| Kamil: Help / *Yardım* | Her özellik için kısa sayfa ve kopyalanacak `settings.yaml` örnekleri (tarayıcıda, internetsiz) |
+| Kamil: Settings examples / *Ayar örnekleri* | `settings.example.yaml`: her ayar açıklamasıyla, her sürümde güncel |
 | Kamil: Open log / *Günlüğü aç* | `kamil.log` |
 | Kamil: Quit / *Çıkış* | Kamil'i kapatır |
 
 **Tray menüsü** (simgeye sağ tık): Kamil'i aç · VS işleri ve tümünü iptal (iş varsa) · Edit settings · Open settings
-folder · Reload settings · ayar sorunları (varsa) · Rescan · Console · Open log · Quit.
+folder · Reload settings · ayar sorunları (varsa) · Rescan · Console · Help (Yardım ve ayar örnekleri) · Open log · Quit.
 
 ## Ayarlar
 
@@ -468,7 +470,9 @@ folder · Reload settings · ayar sorunları (varsa) · Rescan · Console · Ope
 | Normal | `%APPDATA%\Kamil\settings.yaml` (önbellek ve günlük: `%LOCALAPPDATA%\Kamil\cache`) |
 | Taşınabilir | `Kamil.exe` yanında `data\` klasörü veya `portable.txt` dosyası varsa her şey `data\` altında |
 
-Dosya kaydedildiği anda uygulanır. Hatalı değer varsayılanına döner ve tray balonunda satır numarasıyla bildirilir;
+Dosya kaydedildiği anda uygulanır. Kendi `settings.yaml`'ın hiç yeniden yazılmaz; bu yüzden yeni sürümlerle gelen ayarlar ona
+eklenmez: hepsi açıklamalarıyla `settings.example.yaml`'da (*Kamil: Ayar örnekleri*), özellik başına örnekler *Kamil: Yardım*'da.
+Yeni bir sürüm ilk açıldığında bunu bir balon hatırlatır. Hatalı değer varsayılanına döner ve tray balonunda satır numarasıyla bildirilir;
 YAML sözdizimi bozuksa önceki ayarlar korunur. Her ayarın açıklaması dosyanın içinde yazar. VS Code + YAML eklentisiyle
 açarsan `schema\settings.json` sayesinde otomatik tamamlama ve hata gösterimi çalışır. Windows yollarını **tek
 tırnakla** yaz: `'D:\src'`.

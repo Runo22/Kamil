@@ -16,10 +16,18 @@
 #include "core/hotkey.h"
 #include "core/i18n.h"
 #include "core/log.h"
+#include "core/help.h"
 #include "core/settings_schema.h"
 #include "core/text.h"
 #include "platform/process.h"
 #include "platform/system_theme.h"
+
+#ifndef KAMIL_VERSION
+#define KAMIL_VERSION "dev"
+#endif
+#ifndef KAMIL_COMMIT
+#define KAMIL_COMMIT ""
+#endif
 
 namespace kamil {
 
@@ -45,6 +53,7 @@ enum MenuId : UINT {
     IDM_CANCEL_JOBS,
     IDM_LOG,
     IDM_EXIT,
+    IDM_HELP,
 };
 
 // Built-in commands appear in the result list like any other item. Both languages' titles are
@@ -78,6 +87,10 @@ constexpr BuiltinCommand kCommands[] = {
     {L"log", L"Kamil: Open log", L"Kamil: Günlüğü aç", L"kamil.log: what Kamil did, especially with Visual Studio",
      L"kamil.log: Kamil'in yaptıkları, özellikle Visual Studio ile"},
     {L"spell", L"Spell check", L"Yazım denetimi", L"Checks the copied text (English + Turkish)", L"Panodaki metni denetler (English + Türkçe)"},
+    {L"help", L"Kamil: Help", L"Kamil: Yardım", L"A short page per feature, with settings.yaml examples to copy",
+     L"Her özellik için kısa bir sayfa, kopyalanacak settings.yaml örnekleriyle"},
+    {L"settings-example", L"Kamil: Settings examples", L"Kamil: Ayar örnekleri",
+     L"Every setting with its explanation (settings.example.yaml, always up to date)", L"Her ayar açıklamasıyla (settings.example.yaml, her zaman güncel)"},
     {L"quit", L"Kamil: Quit", L"Kamil: Çıkış", L"Closes Kamil (the hotkey stops working)", L"Kamil'i kapatır (kısayol devre dışı kalır)"},
 };
 
@@ -166,8 +179,11 @@ int App::run(HINSTANCE instance, bool autostart) {
     load_last_project();
     apps_ = AppsProvider::load_cache(paths_.apps_cache_file());
 
+    std::error_code settings_ec;
+    const bool existing_user = std::filesystem::exists(paths_.settings_file(), settings_ec);
     ensure_config_files();
     reload_settings(true);
+    announce_update(existing_user);
 
     watcher_.start(paths_.config_dir, {L"settings.yaml"}, hwnd_);
     apps_provider_.scan_async(hwnd_);
@@ -244,6 +260,28 @@ void App::ensure_config_files() {
     }
     // Always refresh the JSON Schema so editor completion matches this Kamil version.
     write_if_changed(paths_.schema_file(), generate_json_schema(schema));
+    // Every setting with its explanation and examples, for this version: settings.yaml itself is
+    // the user's and is never rewritten, so new settings only show up here (and in Kamil: Help).
+    write_if_changed(paths_.config_dir / "settings.example.yaml", generate_default_yaml(schema, "./schema/settings.json"));
+}
+
+void App::announce_update(bool existing_user) {
+    // Once per new build: settings.yaml of an existing user does not get the new settings, so
+    // point to where they are described.
+    std::string current = std::string(KAMIL_VERSION) + " " + KAMIL_COMMIT;
+    const auto file = paths_.config_dir / "last-version.txt";
+    std::string previous;
+    {
+        std::ifstream in(file, std::ios::binary);
+        std::getline(in, previous);
+    }
+    if (trim(std::string_view(previous)) == trim(std::string_view(current))) return;
+    std::ofstream(file, std::ios::binary | std::ios::trunc) << current << "\n";
+    if (!existing_user) return;  // a new user gets the full settings.yaml anyway
+    notify(loc(L"Kamil was updated", L"Kamil güncellendi"),
+           loc(L"What's new and settings examples: tray menu → Help (or Kamil: Help).",
+               L"Yenilikler ve ayar örnekleri: tray menüsü → Yardım (ya da Kamil: Yardım)."),
+           Tray::Balloon::Info);
 }
 
 void App::reload_settings(bool initial) {
@@ -610,6 +648,18 @@ void App::run_command(const std::wstring& id) {
         show_console(true);
     } else if (id == L"diagnostics") {
         write_diagnostics();
+    } else if (id == L"help") {
+        const auto file = paths_.cache_dir / "help.html";
+        std::string version = KAMIL_VERSION;
+        if (*KAMIL_COMMIT) version += std::string(" (") + KAMIL_COMMIT + ")";
+        write_if_changed(file, help_html(language() == Lang::Tr, version));
+        launcher_.hide();
+        executor_->post([file] { ShellExecuteW(nullptr, L"open", file.c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
+    } else if (id == L"settings-example") {
+        ensure_config_files();
+        const auto file = paths_.config_dir / "settings.example.yaml";
+        launcher_.hide();
+        executor_->post([file] { open_in_editor(file); });
     } else if (id == L"log") {
         const auto file = log_file();
         executor_->post([file] { open_in_editor(file); });
@@ -994,6 +1044,7 @@ void App::show_tray_menu(POINT at) {
     }
     AppendMenuW(menu, MF_STRING, IDM_RESCAN, loc(L"Rescan apps and files", L"Uygulamaları ve dosyaları yeniden tara"));
     AppendMenuW(menu, MF_STRING, IDM_CONSOLE, loc(L"Console", L"Konsol"));
+    AppendMenuW(menu, MF_STRING, IDM_HELP, loc(L"Help and settings examples", L"Yardım ve ayar örnekleri"));
     AppendMenuW(menu, MF_STRING, IDM_LOG, loc(L"Open log", L"Günlüğü aç"));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, IDM_EXIT, loc(L"Quit", L"Çıkış"));
@@ -1017,6 +1068,7 @@ void App::show_tray_menu(POINT at) {
             break;
         }
         case IDM_LOG: run_command(L"log"); break;
+        case IDM_HELP: run_command(L"help"); break;
         case IDM_CONSOLE: run_command(L"console"); break;
         case IDM_EXIT: run_command(L"quit"); break;
         default: break;

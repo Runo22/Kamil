@@ -44,6 +44,7 @@ add_library(kamil_core STATIC
     src/core/file_index.cpp
     src/core/fuzzy.cpp
     src/core/git.cpp
+    src/core/help.cpp
     src/core/hotkey.cpp
     src/core/i18n.cpp
     src/core/log.cpp
@@ -126,7 +127,7 @@ endif()
 
 if(KAMIL_BUILD_TESTS)
     enable_testing()
-    add_executable(kamil_tests tests/test_main.cpp tests/test_bookmarks.cpp tests/test_cmake.cpp tests/test_conan.cpp tests/test_console.cpp tests/test_core.cpp tests/test_file_index.cpp tests/test_git.cpp tests/test_path_input.cpp tests/test_settings.cpp tests/test_spell.cpp tests/test_svg_path.cpp tests/test_workspaces.cpp)
+    add_executable(kamil_tests tests/test_main.cpp tests/test_bookmarks.cpp tests/test_cmake.cpp tests/test_conan.cpp tests/test_console.cpp tests/test_core.cpp tests/test_file_index.cpp tests/test_git.cpp tests/test_help.cpp tests/test_path_input.cpp tests/test_settings.cpp tests/test_spell.cpp tests/test_svg_path.cpp tests/test_workspaces.cpp)
     target_link_libraries(kamil_tests PRIVATE kamil_core)
     target_compile_options(kamil_tests PRIVATE ${KAMIL_WARNINGS})
     if(MINGW)

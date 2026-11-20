@@ -194,6 +194,7 @@ private:
     void spell_done(const std::wstring& text, bool paste_back);
     void paste_back_now();
     void remember_foreground();  // the window Kamil is opened over (where Ctrl+Enter pastes back)
+    void announce_update(bool existing_user);  // once per new build: "see Kamil: Help"
 
     // Git actions in Ctrl+K of repositories and git folders (app_git.cpp)
     void add_git_actions(const std::wstring& path, std::vector<Item>& list) const;
