@@ -69,6 +69,7 @@ inline constexpr const char* kWorkspaces = "workspaces";
 
 inline constexpr const char* kSpellLanguages = "spell.languages";
 inline constexpr const char* kSpellPasteBack = "spell.paste_back";
+inline constexpr const char* kSpellKeywords = "spell.keywords";
 }  // namespace keys
 
 }  // namespace kamil

@@ -216,9 +216,12 @@ void App::paste_back_now() {
 }
 
 bool App::spell_query(const std::wstring& query, std::vector<Hit>& hits) {
-    auto rest = scoped_query(query, L"yaz");
-    if (!rest) rest = scoped_query(query, L"spell");
-    if (!rest || rest->empty()) return false;  // "yaz" alone finds the Spell check command
+    std::optional<std::wstring> rest;
+    for (const auto& k : store_.current()->get_list(keys::kSpellKeywords)) {
+        const std::wstring keyword(trim(std::wstring_view(widen(k))));
+        if (!keyword.empty() && (rest = scoped_query(query, keyword))) break;
+    }
+    if (!rest || rest->empty()) return false;  // the keyword alone finds the Spell check command (an alias)
     ensure_spell();
     query_items_.clear();
     query_items_.reserve(10);  // hits point into query_items_: it must never reallocate

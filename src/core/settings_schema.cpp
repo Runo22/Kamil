@@ -283,12 +283,19 @@ Schema build() {
               {"The .conan folder; empty: %CONAN_USER_HOME%\\.conan when that variable is set, else %USERPROFILE%\\.conan",
                ".conan klasörü; boş: CONAN_USER_HOME tanımlıysa %CONAN_USER_HOME%\\.conan, değilse %USERPROFILE%\\.conan"}));
     s.set_section_title("spell", "Spell check", "Yazım denetimi");
-    s.add(def(keys::kSpellLanguages, Kind::StringList, Value::List{"tr-TR", "en-US"}, {"Languages", "Diller"},
+    s.add(def(keys::kSpellKeywords, Kind::StringList, Value::List{"spell"}, {"Keywords", "Anahtar kelimeler"},
+              {"Typed exactly in the search, a keyword puts Spell check first (Enter opens the window with the copied text); "
+               "followed by words, it suggests corrections right in the list ('spell recieved'). Example: ['spell', 'yaz']",
+               "Aramaya tam yazılınca Yazım denetimi'ni en üste getirir (Enter pencereyi panodaki metinle açar); ardından kelime "
+               "yazılınca düzeltmeleri doğrudan listede önerir ('spell recieved'). Örnek: ['spell', 'yaz']"}));
+    s.add(def(keys::kSpellLanguages, Kind::StringList, Value::List{"en-US", "tr-TR"}, {"Languages", "Diller"},
               {"Languages offered in the spell check window (language tags: tr-TR, en-US, en-GB, de-DE ...), checked together: a word "
-               "is wrong only when none of the active ones knows it. The chips in the window switch them on and off. The dictionaries "
+               "is wrong only when none of the active ones knows it; the first one gets the words added to the dictionary. The chips "
+               "in the window switch them on and off. The dictionaries "
                "are Windows' own: Settings > Time & language > Language",
                "Yazım denetimi penceresinde sunulan diller (dil etiketleri: tr-TR, en-US, en-GB, de-DE ...), birlikte denetlenir: bir "
-               "kelime ancak açık dillerin hiçbiri tanımıyorsa hatalıdır. Penceredeki çipler dilleri açıp kapatır. Sözlükler "
+               "kelime ancak açık dillerin hiçbiri tanımıyorsa hatalıdır; sözlüğe eklenen kelimeler ilk dile yazılır. Penceredeki "
+               "çipler dilleri açıp kapatır. Sözlükler "
                "Windows'un kendisinindir: Ayarlar > Saat ve dil > Dil"}));
     s.add(def(keys::kSpellPasteBack, Kind::Bool, true, {"Paste back", "Geri yapıştır"},
               {"Ctrl+Enter copies the corrected text and pastes it into the program Kamil was opened over (it replaces the "

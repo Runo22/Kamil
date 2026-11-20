@@ -77,8 +77,7 @@ constexpr BuiltinCommand kCommands[] = {
      L"Report: version, folders, index, search speed, Visual Studio, crash dumps", L"Rapor: sürüm, klasörler, indeks, arama hızı, Visual Studio, çökme dökümleri"},
     {L"log", L"Kamil: Open log", L"Kamil: Günlüğü aç", L"kamil.log: what Kamil did, especially with Visual Studio",
      L"kamil.log: Kamil'in yaptıkları, özellikle Visual Studio ile"},
-    {L"spell", L"Spell check", L"Yazım denetimi", L"Checks the copied text (Turkish + English); also type: yaz <word>",
-     L"Panodaki metni denetler (Türkçe + English); ya da yaz: yaz <kelime>"},
+    {L"spell", L"Spell check", L"Yazım denetimi", L"Checks the copied text (English + Turkish)", L"Panodaki metni denetler (English + Türkçe)"},
     {L"quit", L"Kamil: Quit", L"Kamil: Çıkış", L"Closes Kamil (the hotkey stops working)", L"Kamil'i kapatır (kısayol devre dışı kalır)"},
 };
 
@@ -324,6 +323,10 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
     load_workspaces(s, !initial && touched(keys::kWorkspaces));
     for (const auto& w : workspaces_)  // and a workspace's
         if (!w.keyword_folded.empty()) search_options_.aliases.push_back({w.keyword_folded, fold(w.name)});
+    for (const auto& k : s.get_list(keys::kSpellKeywords)) {  // and Spell check's
+        const std::wstring keyword = fold(trim(std::wstring_view(widen(k))));
+        if (!keyword.empty()) search_options_.aliases.push_back({keyword, fold(std::wstring_view(loc(L"Spell check", L"Yazım denetimi")))});
+    }
     if (initial || touched(keys::kConan)) scan_conan();
     if (!initial && touched("spell") && spell_) {
         rebuild_spell_session();
@@ -434,8 +437,13 @@ void App::rebuild_items() {
         it.keywords = tr ? c.title_en : c.title_tr;
         if (it.target == L"jobs") it.keywords += L" queue cancel kuyruk sıra iptal";
         if (it.target == L"spell") {
-            it.keywords += L" yaz yazim imla spelling typo";
+            it.keywords += L" yazim imla spelling typo";
             it.glyph = kGlyphSpell;
+            // "Checks the copied text; or type: spell <word>" with the first keyword of the settings.
+            const auto kw = store_.current()->get_list(keys::kSpellKeywords);
+            const std::wstring first = kw.empty() ? std::wstring() : std::wstring(trim(std::wstring_view(widen(kw.front()))));
+            it.subtitle = first.empty() ? std::wstring(loc(L"Checks the copied text (English + Turkish)", L"Panodaki metni denetler (English + Türkçe)"))
+                                        : fmt(loc(L"Checks the copied text; or type: {} <word>", L"Panodaki metni denetler; ya da yaz: {} <kelime>"), first);
         }
         it.prepare();
         items.push_back(std::move(it));
