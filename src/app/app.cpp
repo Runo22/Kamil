@@ -77,6 +77,8 @@ constexpr BuiltinCommand kCommands[] = {
      L"Report: version, folders, index, search speed, Visual Studio, crash dumps", L"Rapor: sürüm, klasörler, indeks, arama hızı, Visual Studio, çökme dökümleri"},
     {L"log", L"Kamil: Open log", L"Kamil: Günlüğü aç", L"kamil.log: what Kamil did, especially with Visual Studio",
      L"kamil.log: Kamil'in yaptıkları, özellikle Visual Studio ile"},
+    {L"spell", L"Spell check", L"Yazım denetimi", L"Checks the copied text (Turkish + English); also type: yaz <word>",
+     L"Panodaki metni denetler (Türkçe + English); ya da yaz: yaz <kelime>"},
     {L"quit", L"Kamil: Quit", L"Kamil: Çıkış", L"Closes Kamil (the hotkey stops working)", L"Kamil'i kapatır (kısayol devre dışı kalır)"},
 };
 
@@ -323,6 +325,10 @@ void App::apply_settings(const Settings& s, const std::vector<std::string>& chan
     for (const auto& w : workspaces_)  // and a workspace's
         if (!w.keyword_folded.empty()) search_options_.aliases.push_back({w.keyword_folded, fold(w.name)});
     if (initial || touched(keys::kConan)) scan_conan();
+    if (!initial && touched("spell") && spell_) {
+        rebuild_spell_session();
+        if (spell_window_.visible()) spell_window_.set_chips(spell_chips());
+    }
     search_options_.folder_boosts.clear();
     for (const auto& obj : s.get_objects(keys::kFolderPriority)) {
         const Value* p = obj.find("path");
@@ -427,6 +433,10 @@ void App::rebuild_items() {
         // The other language's title as a search keyword ("ayarlar" also finds "Edit settings").
         it.keywords = tr ? c.title_en : c.title_tr;
         if (it.target == L"jobs") it.keywords += L" queue cancel kuyruk sıra iptal";
+        if (it.target == L"spell") {
+            it.keywords += L" yaz yazim imla spelling typo";
+            it.glyph = kGlyphSpell;
+        }
         it.prepare();
         items.push_back(std::move(it));
     }
@@ -467,7 +477,7 @@ void App::run_query(const std::wstring& query) {
     search_options_.now_unix = now_unix();
     std::vector<Hit> hits;
     // "main.cpp:120" opens a file at a line; "C:\x\" lists a folder; otherwise the normal search.
-    if (!location_query(query, hits) && !browse_query(query, hits)) {
+    if (!spell_query(query, hits) && !location_query(query, hits) && !browse_query(query, hits)) {
         if (!conan_query(query, hits)) {
             hits = search(items_, query, usage_, search_options_);
             add_file_hits(query, hits);
@@ -484,7 +494,7 @@ void App::run_query(const std::wstring& query) {
 // Actions
 
 void App::on_activate(const Item& item, LaunchMode mode) {
-    if (search_options_.learning) {
+    if (search_options_.learning && item.key.rfind(L"spell:", 0) != 0) {  // "yaz <word>" results are not learned
         usage_.record(item.key, fold(trim(std::wstring_view(launcher_.query()))), now_unix());
         schedule_usage_save();
     }
@@ -537,6 +547,18 @@ void App::on_activate(const Item& item, LaunchMode mode) {
 }
 
 void App::run_command(const std::wstring& id) {
+    if (id == L"spell") {
+        open_spell(read_clipboard_text(hwnd_));
+        return;
+    }
+    if (id.rfind(L"spell-copy:", 0) == 0) {
+        copy_to_clipboard(hwnd_, id.substr(11));
+        return;
+    }
+    if (id.rfind(L"spell-open:", 0) == 0) {
+        open_spell(id.substr(11));
+        return;
+    }
     if (id.rfind(L"user:", 0) == 0) {
         run_user_command(std::wcstoul(id.c_str() + 5, nullptr, 10));
         return;
@@ -933,7 +955,10 @@ Footer App::footer_for(const Item* selected, const Item* parent) {
 void App::toggle_from_tray() {
     // Clicking the tray icon first deactivates the launcher (which hides it); do not reopen it.
     if (!launcher_.visible() && GetTickCount64() - launcher_.hidden_at() < 300) return;
-    if (!launcher_.visible()) before_show();
+    if (!launcher_.visible()) {
+        remember_foreground();
+        before_show();
+    }
     launcher_.toggle();
 }
 
@@ -1007,7 +1032,10 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             if (wp == kHotkeyId) {
                 // Folders that cannot be watched (e.g. some network shares): rescan when the window opens.
                 if (!launcher_.visible() && watched_roots_ < index_roots_ && GetTickCount64() - files_scanned_at_ > 120'000) scan_files();
-                if (!launcher_.visible()) before_show();
+                if (!launcher_.visible()) {
+                    remember_foreground();
+                    before_show();
+                }
                 launcher_.toggle();
             }
             return 0;
@@ -1102,7 +1130,9 @@ LRESULT App::handle(UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
         case WM_TIMER:
-            if (wp == kTimerReloadSettings) {
+            if (wp == kTimerPasteBack) {
+                paste_back_now();
+            } else if (wp == kTimerReloadSettings) {
                 KillTimer(hwnd_, kTimerReloadSettings);
                 reload_settings(false);
             } else if (wp == kTimerSaveUsage) {

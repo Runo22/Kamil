@@ -282,6 +282,19 @@ Schema build() {
     s.add(def(keys::kConanHome, Kind::Path, "", {"Conan home", "Conan klasörü"},
               {"The .conan folder; empty: %CONAN_USER_HOME%\\.conan when that variable is set, else %USERPROFILE%\\.conan",
                ".conan klasörü; boş: CONAN_USER_HOME tanımlıysa %CONAN_USER_HOME%\\.conan, değilse %USERPROFILE%\\.conan"}));
+    s.set_section_title("spell", "Spell check", "Yazım denetimi");
+    s.add(def(keys::kSpellLanguages, Kind::StringList, Value::List{"tr-TR", "en-US"}, {"Languages", "Diller"},
+              {"Languages offered in the spell check window (language tags: tr-TR, en-US, en-GB, de-DE ...), checked together: a word "
+               "is wrong only when none of the active ones knows it. The chips in the window switch them on and off. The dictionaries "
+               "are Windows' own: Settings > Time & language > Language",
+               "Yazım denetimi penceresinde sunulan diller (dil etiketleri: tr-TR, en-US, en-GB, de-DE ...), birlikte denetlenir: bir "
+               "kelime ancak açık dillerin hiçbiri tanımıyorsa hatalıdır. Penceredeki çipler dilleri açıp kapatır. Sözlükler "
+               "Windows'un kendisinindir: Ayarlar > Saat ve dil > Dil"}));
+    s.add(def(keys::kSpellPasteBack, Kind::Bool, true, {"Paste back", "Geri yapıştır"},
+              {"Ctrl+Enter copies the corrected text and pastes it into the program Kamil was opened over (it replaces the "
+               "selection there); false: only copies",
+               "Ctrl+Enter düzeltilmiş metni kopyalar ve Kamil'in üzerinde açıldığı programa yapıştırır (oradaki seçimin yerine "
+               "geçer); false: yalnızca kopyalar"}));
     s.set_section_title("apps", "Applications", "Uygulamalar");
     s.add(def(keys::kBringRunning, Kind::GlobList, Value::List{}, {"Bring the running window", "Açık pencereyi getir"},
               {"Programs that are not started a second time: when one is already running, Enter brings its window to the front on "

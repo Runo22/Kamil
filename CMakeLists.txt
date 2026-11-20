@@ -56,6 +56,7 @@ add_library(kamil_core STATIC
     src/core/svg_path.cpp
     src/core/settings.cpp
     src/core/settings_schema.cpp
+    src/core/spell.cpp
     src/core/text.cpp
     src/core/usage.cpp
     src/core/workspaces.cpp
@@ -76,6 +77,7 @@ if(WIN32)
         src/app/app_files.cpp
         src/app/app_git.cpp
         src/app/app_projects.cpp
+        src/app/app_spell.cpp
         src/app/app_diagnostics.cpp
         src/app/app_commands.cpp
         src/app/app_console.cpp
@@ -89,6 +91,7 @@ if(WIN32)
         src/platform/key_hook.cpp
         src/platform/process.cpp
         src/platform/shell.cpp
+        src/platform/spell_checker.cpp
         src/platform/system_theme.cpp
         src/platform/tools.cpp
         src/platform/tree_watcher.cpp
@@ -98,6 +101,8 @@ if(WIN32)
         src/providers/apps_provider.cpp
         src/providers/repo_provider.cpp
         src/ui/console_window.cpp
+        src/ui/fluent_geometry.cpp
+        src/ui/spell_window.cpp
         src/ui/launcher_window.cpp
         src/ui/renderer.cpp
         res/kamil.rc
@@ -121,7 +126,7 @@ endif()
 
 if(KAMIL_BUILD_TESTS)
     enable_testing()
-    add_executable(kamil_tests tests/test_main.cpp tests/test_bookmarks.cpp tests/test_cmake.cpp tests/test_conan.cpp tests/test_console.cpp tests/test_core.cpp tests/test_file_index.cpp tests/test_git.cpp tests/test_path_input.cpp tests/test_settings.cpp tests/test_svg_path.cpp tests/test_workspaces.cpp)
+    add_executable(kamil_tests tests/test_main.cpp tests/test_bookmarks.cpp tests/test_cmake.cpp tests/test_conan.cpp tests/test_console.cpp tests/test_core.cpp tests/test_file_index.cpp tests/test_git.cpp tests/test_path_input.cpp tests/test_settings.cpp tests/test_spell.cpp tests/test_svg_path.cpp tests/test_workspaces.cpp)
     target_link_libraries(kamil_tests PRIVATE kamil_core)
     target_compile_options(kamil_tests PRIVATE ${KAMIL_WARNINGS})
     if(MINGW)

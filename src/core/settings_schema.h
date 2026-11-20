@@ -66,6 +66,9 @@ inline constexpr const char* kBringRunning = "apps.bring_running";
 // Custom commands (a top-level list)
 inline constexpr const char* kCommands = "commands";
 inline constexpr const char* kWorkspaces = "workspaces";
+
+inline constexpr const char* kSpellLanguages = "spell.languages";
+inline constexpr const char* kSpellPasteBack = "spell.paste_back";
 }  // namespace keys
 
 }  // namespace kamil

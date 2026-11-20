@@ -31,6 +31,9 @@ ICONS = [  # glyph code, icon file, colour, what it is in Kamil
     (0xE8B7, "folder_24_regular", GENERAL, "Folder, file location"),
     (0xE756, "window_console_20_regular", GENERAL, "Terminal"),
     (0xE7EF, "shield_24_regular", GENERAL, "Run as administrator"),
+    (0xE8D2, "text_grammar_checkmark_24_regular", OK, "Spell check"),
+    (0xE8C3, "book_add_24_regular", GENERAL, "Add to dictionary"),
+    (0xE7B3, "eye_off_24_regular", GENERAL, "Ignore"),
 ]
 
 def main():

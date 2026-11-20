@@ -111,6 +111,17 @@ void App::write_diagnostics() {
                                                     L"; CONAN_USER_HOME, %USERPROFILE%\\.conan or dev.conan_home)");
     else line(L"Conan", conan_data_ + L": " + std::to_wstring(conan_.size()) + L" packages");
     line(L"Workspaces", std::to_wstring(workspaces_.size()));
+    {
+        WindowsSpell probe;
+        std::wstring langs;
+        for (const auto& l : probe.languages()) langs += (langs.empty() ? L"" : L", ") + l;
+        line(L"Spell check languages on this PC", !probe.available() ? std::wstring(L"spell checking service not available")
+                                                   : langs.empty()     ? std::wstring(L"none (Settings > Time & language > Language)")
+                                                                       : langs);
+        std::wstring active;
+        for (const auto& l : spell_session_.languages()) active += (active.empty() ? L"" : L", ") + l->tag();
+        if (spell_) line(L"Spell check active", active.empty() ? std::wstring(L"none") : active);
+    }
     for (const auto& b : bookmarks_) {
         std::error_code ec;
         const std::wstring state = is_unc_path(b.path) ? L"network path, not checked"

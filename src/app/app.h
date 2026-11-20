@@ -30,8 +30,10 @@
 #include "platform/tools.h"
 #include "platform/tree_watcher.h"
 #include "platform/shell.h"
+#include "platform/spell_checker.h"
 #include "platform/tray.h"
 #include "platform/vs_bridge.h"
+#include "ui/spell_window.h"
 #include "platform/window_focus.h"
 #include "providers/apps_provider.h"
 #include "providers/repo_provider.h"
@@ -183,6 +185,16 @@ private:
     bool run_workspace_action(const Item& item, const std::wstring& action);
     void before_show();  // refreshes what may have changed while the window was closed
 
+    // Spell check (app_spell.cpp)
+    void open_spell(std::wstring text);
+    bool spell_query(const std::wstring& query, std::vector<Hit>& hits);  // "yaz <words>"
+    void ensure_spell();
+    void rebuild_spell_session();
+    std::vector<SpellLanguageChip> spell_chips();
+    void spell_done(const std::wstring& text, bool paste_back);
+    void paste_back_now();
+    void remember_foreground();  // the window Kamil is opened over (where Ctrl+Enter pastes back)
+
     // Git actions in Ctrl+K of repositories and git folders (app_git.cpp)
     void add_git_actions(const std::wstring& path, std::vector<Item>& list) const;
     bool run_git_action(const Item& parent, const std::wstring& action);
@@ -282,7 +294,7 @@ private:
     uint64_t index_hash_ = 0;          // settings the current file index was built for
     size_t index_roots_ = 0, watched_roots_ = 0;
     TreeWatcher fs_watcher_;           // keeps file_index_ current between scans
-    enum : UINT_PTR { kTimerFileRescan = 5, kTimerSaveIndex = 6 };
+    enum : UINT_PTR { kTimerFileRescan = 5, kTimerSaveIndex = 6, kTimerPasteBack = 7 };
     std::vector<float> query_ms_;      // recent search times (ring buffer), for Diagnostics
     size_t query_next_ = 0;
     std::atomic<ULONGLONG> warm_ms_{0};  // written by the warm thread
@@ -303,6 +315,13 @@ private:
     ULONGLONG conan_scanned_at_ = 0;
     bool conan_scanning_ = false;
     std::vector<Workspace> workspaces_;
+    std::unique_ptr<WindowsSpell> spell_;
+    SpellSession spell_session_;
+    SpellWindow spell_window_;
+    bool spell_window_ok_ = false;
+    std::vector<std::wstring> spell_active_;  // languages switched on in the window (spell-languages.txt)
+    HWND foreground_before_ = nullptr;        // the window Kamil was opened over
+    HWND spell_target_ = nullptr;             // where the spell window pastes back
     std::wstring last_project_;  // CMake project acted on last: target of action commands
 
     // Hotkeys with the Windows key go through a keyboard hook (Windows reserves many of them).

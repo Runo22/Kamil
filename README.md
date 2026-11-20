@@ -20,6 +20,7 @@ Tasarım ve yol haritası: [`docs/TASARIM.md`](docs/TASARIM.md)
 [Dosyayı satırında aç](#dosyayı-satırında-aç-maincpp120) ·
 [Çalışma alanları](#çalışma-alanları-workspaces) ·
 [Conan paketleri](#conan-paketleri) ·
+[Yazım denetimi](#yazım-denetimi) ·
 [Dahili komutlar](#dahili-komutlar) ·
 [Ayarlar](#ayarlar) ·
 [Sorun giderme](#sorun-giderme) ·
@@ -318,6 +319,40 @@ gelir, aynı adlı klasörler altta kalır. `conan fmt` yalnızca paketlerde ara
   Bulunamazsa *Kamil: Diagnostics* raporundaki `Conan:` satırı nereye bakıldığını söyler. Liste açılışta, *Kamil: Rescan* ile ve pencere en son bir dakikadan önce açıldıysa yeniden
   okunur. Kapatmak için `dev.conan: false`.
 
+## Yazım denetimi
+
+Windows'un kendi yazım denetleyicisiyle (yüklü dil paketlerinin sözlükleri; Kamil'e sözlük eklenmez) Türkçe ve
+İngilizce **birlikte** denetler: bir kelime ancak açık dillerin hiçbiri tanımıyorsa hatalıdır.
+
+1. Herhangi bir programda metni seç, `Ctrl+C`.
+2. Kamil → `yaz` (ya da *Yazım denetimi*) + `Enter`: pencere panodaki metinle açılır; hatalı kelimeler kırmızı, tekrarlanan
+   kelimeler ("the the") mavi dalgalı çizgiyle işaretlidir. Pencereye doğrudan da yazabilirsin; yazdıkça denetlenir.
+3. Düzelt, sonra `Ctrl+Enter`: düzeltilmiş metin panoya kopyalanır ve geldiğin programa **geri yapıştırılır** (oradaki
+   seçimin yerine geçer).
+
+| Tuş / fare | İşlev |
+|---|---|
+| Sağ tık, `Ctrl+.`, menü tuşu | Öneriler; altında *Her yerde düzelt*, *Sözlüğe ekle*, *Yoksay* |
+| `Tab` | İmleç hatalı kelimedeyse ilk öneriyi uygular (alt çubukta `Tab → öneri` görünür) |
+| `F8` / `Shift+F8` | Sonraki / önceki hata |
+| `Ctrl+Shift+F` | Her hataya ilk öneriyi uygular (tek `Ctrl+Z` ile geri alınır) |
+| `Ctrl+Enter` / `Ctrl+Shift+Enter` | Kopyala ve geri yapıştır / yalnızca kopyala |
+| `Esc` | Kapat |
+
+- **Diller:** üst çubuktaki çipler (ör. *Türkçe*, *English*) tıklanınca açılıp kapanır; seçim hatırlanır. Sunulan diller
+  `spell.languages` ayarıdır (varsayılan `['tr-TR', 'en-US']`; `en-GB`, `de-DE` … eklenebilir). Windows'ta yüklü olmayan bir
+  dil "yüklü değil" yazar; tıklanınca Windows'un dil ayarları açılır (Ayarlar > Saat ve dil > Dil > dil ekle).
+- **Sözlüğe ekle** kelimeyi Windows'un kişisel sözlüğüne yazar: Windows'un denetleyicisini kullanan diğer programlar da
+  tanır. *Yoksay* yalnızca bu oturum için.
+- Kod gibi görünenler işaretlenmez: rakam, `_`, `/`, `\`, `@`, `.` içerenler, `camelCase`, `CI` / `API` gibi kısaltmalar.
+- İki dil birlikte denetlenince öbür dilde geçerli olan bir yazım hatası yakalanmaz ("önce" yerine "once"): gerekirse
+  çiple tek dile geç.
+- **Hızlı mod:** aramaya `yaz degisiklik` yazınca öneriler sonuç olarak çıkar, `Enter` kopyalar. Birden çok kelimede
+  düzeltilmiş hali gelir.
+- Geri yapıştırma `spell.paste_back: false` ile kapatılır (yalnızca kopyalar). Yönetici olarak çalışan bir programa
+  Windows yapıştırmaya izin vermez: metin panoda kalır, bildirim söyler.
+- *Kamil: Diagnostics* bu bilgisayarda yazım sözlüğü olan dilleri listeler.
+
 ## Kamil Console
 
 `Alt+R` ile çalıştırılan programların çıktısı, Visual Studio build'lerinin **Build** bölmesi ve `console: hidden`
@@ -471,6 +506,9 @@ dev:
   vs_wait_seconds: 90
 commands: [...]             # yukarıda
 workspaces: [...]           # yukarıda (Çalışma alanları)
+spell:
+  languages: ['tr-TR', 'en-US']   # yazım denetimi dilleri
+  paste_back: true          # Ctrl+Enter geri yapıştırır
 ```
 
 ## Sorun giderme

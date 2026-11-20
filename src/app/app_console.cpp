@@ -62,6 +62,7 @@ void App::update_console_theme() {
     const std::string a = s->get_string(keys::kAccent);
     if (a.size() == 7 && a[0] == '#') accent = static_cast<uint32_t>(std::strtoul(a.c_str() + 1, nullptr, 16));
     console_.set_theme(dark, accent);
+    if (spell_window_ok_) spell_window_.set_theme(dark, accent);
 }
 
 void App::show_console(bool activate) {
